@@ -1,0 +1,30 @@
+{
+  "name": "traceiq",
+  "version": "1.0.0",
+  "description": "AI Database Investigation Agent",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:setup": "node scripts/setup-db.js",
+    "db:seed": "node scripts/seed-db.js",
+    "db:reset": "node scripts/reset-db.js"
+  },
+  "keywords": ["ai", "database", "investigation", "mysql"],
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "groq-sdk": "^0.15.0",
+    "mysql2": "^3.12.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.9"
+  }
+}
