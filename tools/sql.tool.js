@@ -37,7 +37,8 @@ export const sqlTool = {
       };
     }
 
-    const limitedSql = validation.sanitized + ` LIMIT ${env.MAX_QUERY_ROWS}`;
+    const hasLimit = /\bLIMIT\s+\d+/i.test(validation.sanitized);
+    const limitedSql = hasLimit ? validation.sanitized : validation.sanitized + ` LIMIT ${env.MAX_QUERY_ROWS}`;
 
     try {
       const start = Date.now();
