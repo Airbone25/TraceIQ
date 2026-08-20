@@ -13,11 +13,39 @@ function getClient() {
   return client;
 }
 
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
+function isRetryableError(err) {
+  const status = err?.status || err?.response?.status;
+  if (status === 429 || status === 500 || status === 502 || status === 503) {
+    return true;
+  }
+  const code = err?.code;
+  if (code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ENOTFOUND') {
+    return true;
+  }
+  return false;
+}
+
+function getRetryDelay(attempt, err) {
+  const retryAfter = err?.headers?.['retry-after'];
+  if (retryAfter) {
+    const seconds = parseInt(retryAfter, 10);
+    if (!isNaN(seconds) && seconds > 0) {
+      return seconds * 1000;
+    }
+  }
+  const jitter = Math.random() * 500;
+  return BASE_DELAY_MS * Math.pow(2, attempt) + jitter;
+}
+
 export async function chatCompletion({ messages, tools, temperature = 0.1 }) {
-  const start = Date.now();
+  const requestStart = Date.now();
+  const model = env.GROQ_MODEL;
 
   const params = {
-    model: 'openai/gpt-oss-120b',
+    model,
     messages,
     temperature,
     max_tokens: 4096,
@@ -35,25 +63,51 @@ export async function chatCompletion({ messages, tools, temperature = 0.1 }) {
     params.tool_choice = 'auto';
   }
 
-  logger.debug({ messageCount: messages.length, hasTools: !!tools?.length }, 'Calling Groq API');
+  logger.debug({ messageCount: messages.length, hasTools: !!tools?.length, model }, 'Calling Groq API');
 
-  const response = await getClient().chat.completions.create(params);
+  let lastError = null;
 
-  const duration = Date.now() - start;
-  const choice = response.choices?.[0];
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const delay = getRetryDelay(attempt - 1, lastError);
+      logger.warn({ attempt, delay, error: lastError?.message }, 'Retrying Groq API call');
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
 
-  logger.info({
-    duration,
-    finishReason: choice?.finish_reason,
-    toolCalls: choice?.message?.tool_calls?.length || 0,
-    promptTokens: response.usage?.prompt_tokens,
-    completionTokens: response.usage?.completion_tokens,
-  }, 'Groq API response received');
+    try {
+      const response = await getClient().chat.completions.create(params);
 
-  return {
-    message: choice?.message,
-    finishReason: choice?.finish_reason,
-    usage: response.usage,
-    duration,
-  };
+      const requestEnd = Date.now();
+      const duration = requestEnd - requestStart;
+      const choice = response.choices?.[0];
+
+      logger.info({
+        duration,
+        attempt,
+        finishReason: choice?.finish_reason,
+        toolCalls: choice?.message?.tool_calls?.length || 0,
+        promptTokens: response.usage?.prompt_tokens,
+        completionTokens: response.usage?.completion_tokens,
+      }, 'Groq API response received');
+
+      return {
+        message: choice?.message,
+        finishReason: choice?.finish_reason,
+        usage: response.usage,
+        duration,
+        model,
+        requestStart,
+        requestEnd,
+        toolCallCount: choice?.message?.tool_calls?.length || 0,
+        error: null,
+      };
+    } catch (err) {
+      lastError = err;
+      logger.error({ error: err.message, attempt, duration: Date.now() - requestStart }, 'Groq API error');
+
+      if (!isRetryableError(err) || attempt === MAX_RETRIES) {
+        throw err;
+      }
+    }
+  }
 }
