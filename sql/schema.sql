@@ -73,3 +73,35 @@ CREATE TABLE IF NOT EXISTS payments (
   INDEX idx_payments_created_at (created_at),
   INDEX idx_payments_method_status (method, status)
 );
+
+-- Investigation persistence tables
+CREATE TABLE IF NOT EXISTS investigations (
+  id VARCHAR(36) PRIMARY KEY,
+  question TEXT NOT NULL,
+  status ENUM('running', 'completed', 'failed') NOT NULL DEFAULT 'running',
+  started_at TIMESTAMP NOT NULL,
+  completed_at TIMESTAMP NULL,
+  duration_ms INT UNSIGNED NULL,
+  steps INT UNSIGNED DEFAULT 0,
+  sql_queries INT UNSIGNED DEFAULT 0,
+  final_answer TEXT NULL,
+  error TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  INDEX idx_investigations_status (status),
+  INDEX idx_investigations_created_at (created_at)
+);
+
+CREATE TABLE IF NOT EXISTS investigation_steps (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  investigation_id VARCHAR(36) NOT NULL,
+  step_number INT UNSIGNED NOT NULL,
+  tool_name VARCHAR(100) NOT NULL,
+  tool_input JSON NULL,
+  tool_output JSON NULL,
+  duration_ms INT UNSIGNED NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (investigation_id) REFERENCES investigations(id) ON DELETE CASCADE,
+  INDEX idx_investigation_steps_investigation_id (investigation_id)
+);
