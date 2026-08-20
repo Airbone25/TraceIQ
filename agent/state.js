@@ -11,6 +11,14 @@ export function createAgentState(userQuestion) {
     status: 'running',
     finalAnswer: null,
     errors: [],
+    llmCalls: 0,
+    llmDuration: 0,
+    toolDuration: 0,
+    llmCallDetails: [],
+    seenSqlHashes: new Set(),
+    sqlDurations: [],
+    failedToolCalls: 0,
+    overheadDuration: 0,
   };
 }
 
@@ -26,11 +34,17 @@ export function hasTimedOut(state) {
   return (Date.now() - state.startTime) >= env.MAX_EXECUTION_TIME_MS;
 }
 
+export function isDuplicateSql(state, sql) {
+  const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase();
+  if (state.seenSqlHashes.has(normalized)) {
+    return true;
+  }
+  state.seenSqlHashes.add(normalized);
+  return false;
+}
+
 export function recordToolCall(state, toolName, input, output, duration) {
   state.steps++;
-  if (toolName === 'execute_sql') {
-    state.sqlQueries++;
-  }
   state.toolCalls.push({
     step: state.steps,
     toolName,
@@ -39,6 +53,21 @@ export function recordToolCall(state, toolName, input, output, duration) {
     duration,
   });
   state.observations.push(output);
+}
+
+export function recordLlmCall(state, response) {
+  state.llmCalls++;
+  state.llmDuration += response.duration;
+  state.llmCallDetails.push({
+    callNumber: state.llmCalls,
+    duration: response.duration,
+    model: response.model,
+    finishReason: response.finishReason,
+    toolCallCount: response.toolCallCount,
+    promptTokens: response.usage?.prompt_tokens,
+    completionTokens: response.usage?.completion_tokens,
+    error: response.error,
+  });
 }
 
 export function markCompleted(state, answer) {

@@ -21,6 +21,11 @@ const availableStats = {
   row_counts: { fn: getTableRowCounts, description: 'Current row counts for all tables' },
 };
 
+const statsSchema = z.object({
+  stat: z.enum(Object.keys(availableStats)),
+  days: z.number().int().positive().optional().default(30),
+});
+
 export const statsTool = {
   name: 'get_stats',
   description: `Retrieves pre-built statistical summaries from the database. Available stats: ${Object.keys(availableStats).join(', ')}. Use this for quick overviews before running custom SQL.`,
@@ -39,6 +44,7 @@ export const statsTool = {
     },
     required: ['stat'],
   },
+  schema: statsSchema,
 
   async execute({ stat, days = 30 }) {
     const entry = availableStats[stat];

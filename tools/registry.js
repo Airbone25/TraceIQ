@@ -36,6 +36,16 @@ export class ToolRegistry {
     if (!tool) {
       throw new Error(`Tool not found: ${name}`);
     }
+
+    if (tool.schema) {
+      const parsed = tool.schema.safeParse(input);
+      if (!parsed.success) {
+        const errors = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
+        throw new Error(`Tool input validation failed for ${name}: ${errors}`);
+      }
+      input = parsed.data;
+    }
+
     return tool.execute(input);
   }
 }

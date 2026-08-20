@@ -27,7 +27,8 @@ export function getPool() {
 
 export async function query(sql, params = []) {
   const start = Date.now();
-  const [rows] = await getPool().execute(sql, params);
+  const timeoutMs = env.MAX_QUERY_TIMEOUT_MS || 30000;
+  const [rows] = await getPool().execute({ sql, timeout: timeoutMs }, params);
   const duration = Date.now() - start;
   logger.debug({ sql: sql.substring(0, 200), duration, rowCount: rows.length }, 'Query executed');
   return rows;

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const MAX_SQL_LENGTH = 10000;
+
 const BLOCKED_KEYWORDS = [
   /\bINSERT\b/i,
   /\bUPDATE\b/i,
@@ -26,9 +28,28 @@ const BLOCKED_PATTERNS = [
   { pattern: /\bSLEEP\s*\(/i, description: 'SLEEP function blocked' },
   { pattern: /\bBENCHMARK\s*\(/i, description: 'BENCHMARK function blocked' },
   { pattern: /\bLOAD_FILE\s*\(/i, description: 'LOAD_FILE blocked' },
+  { pattern: /\bFOR\s+UPDATE\b/i, description: 'SELECT FOR UPDATE blocked (write lock)' },
+  { pattern: /\bLOCK\s+IN\s+SHARE\s+MODE\b/i, description: 'LOCK IN SHARE MODE blocked' },
 ];
 
-export function validateSql(sql) {
+function stripTrailingSemicolon(sql) {
+  return sql.replace(/;\s*$/, '').trimEnd();
+}
+
+function enforceMaxLimit(sql, maxRows) {
+  const clean = stripTrailingSemicolon(sql);
+  const limitMatch = clean.match(/\bLIMIT\s+(\d+)/i);
+  if (limitMatch) {
+    const userLimit = parseInt(limitMatch[1], 10);
+    if (userLimit > maxRows) {
+      return clean.replace(/\bLIMIT\s+\d+/i, `LIMIT ${maxRows}`);
+    }
+    return clean;
+  }
+  return clean;
+}
+
+export function validateSql(sql, { maxRows = 500, maxLength = MAX_SQL_LENGTH } = {}) {
   const errors = [];
 
   if (!sql || typeof sql !== 'string') {
@@ -38,6 +59,10 @@ export function validateSql(sql) {
   const trimmed = sql.trim();
   if (trimmed.length === 0) {
     return { valid: false, errors: ['SQL query cannot be empty'] };
+  }
+
+  if (trimmed.length > maxLength) {
+    return { valid: false, errors: [`SQL query exceeds maximum length of ${maxLength} characters`] };
   }
 
   for (const keyword of BLOCKED_KEYWORDS) {
@@ -57,9 +82,11 @@ export function validateSql(sql) {
     errors.push(`Query must start with SELECT, SHOW, DESCRIBE, or EXPLAIN. Found: ${firstKeyword}`);
   }
 
+  const sanitized = enforceMaxLimit(trimmed, maxRows);
+
   return {
     valid: errors.length === 0,
     errors,
-    sanitized: trimmed,
+    sanitized,
   };
 }

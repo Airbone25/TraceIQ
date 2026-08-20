@@ -11,6 +11,7 @@ export const schemaTool = {
     properties: {},
     required: [],
   },
+  schema: parameters,
 
   async execute() {
     const schema = await getSchemaInfo();

@@ -11,9 +11,17 @@
     "test:watch": "vitest",
     "db:setup": "node scripts/setup-db.js",
     "db:seed": "node scripts/seed-db.js",
-    "db:reset": "node scripts/reset-db.js"
+    "db:reset": "node scripts/reset-db.js",
+    "db:setup-readonly": "node scripts/setup-readonly-user.js",
+    "benchmark": "node scripts/benchmark.js",
+    "eval": "node scripts/eval.js"
   },
-  "keywords": ["ai", "database", "investigation", "mysql"],
+  "keywords": [
+    "ai",
+    "database",
+    "investigation",
+    "mysql"
+  ],
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.4.7",
@@ -25,6 +33,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "supertest": "^7.2.2",
     "vitest": "^3.0.9"
   }
 }

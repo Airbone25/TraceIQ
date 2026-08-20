@@ -26,9 +26,10 @@ export const sqlTool = {
     },
     required: ['sql'],
   },
+  schema: parameters,
 
   async execute({ sql, params = [] }) {
-    const validation = validateSql(sql);
+    const validation = validateSql(sql, { maxRows: env.MAX_QUERY_ROWS });
     if (!validation.valid) {
       return {
         success: false,
@@ -37,8 +38,9 @@ export const sqlTool = {
       };
     }
 
-    const hasLimit = /\bLIMIT\s+\d+/i.test(validation.sanitized);
-    const limitedSql = hasLimit ? validation.sanitized : validation.sanitized + ` LIMIT ${env.MAX_QUERY_ROWS}`;
+    const stripped = validation.sanitized.replace(/;\s*$/, '');
+    const hasLimit = /\bLIMIT\s+\d+/i.test(stripped);
+    const limitedSql = hasLimit ? stripped : stripped + ` LIMIT ${env.MAX_QUERY_ROWS}`;
 
     try {
       const start = Date.now();
