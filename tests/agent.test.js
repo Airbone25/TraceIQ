@@ -1,15 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockChatCompletion, mockRegistryExecute, mockCreateInvestigation, mockAddStep, mockFinalizeInvestigation } = vi.hoisted(() => ({
-  mockChatCompletion: vi.fn(),
-  mockRegistryExecute: vi.fn(),
-  mockCreateInvestigation: vi.fn().mockResolvedValue({ id: 'test-inv-id', startedAt: new Date() }),
-  mockAddStep: vi.fn().mockResolvedValue(undefined),
-  mockFinalizeInvestigation: vi.fn().mockResolvedValue(undefined),
-}));
+const { mockChatCompletion, mockRegistryExecute, mockCreateInvestigation, mockAddStep, mockFinalizeInvestigation, MockRateLimitError } = vi.hoisted(() => {
+  class MockRateLimitError extends Error {
+    constructor(message, retryAfterMs) {
+      super(message);
+      this.name = 'RateLimitError';
+      this.retryAfterMs = retryAfterMs;
+    }
+  }
+  return {
+    mockChatCompletion: vi.fn(),
+    mockRegistryExecute: vi.fn(),
+    mockCreateInvestigation: vi.fn().mockResolvedValue({ id: 'test-inv-id', startedAt: new Date() }),
+    mockAddStep: vi.fn().mockResolvedValue(undefined),
+    mockFinalizeInvestigation: vi.fn().mockResolvedValue(undefined),
+    MockRateLimitError,
+  };
+});
 
 vi.mock('../llm/groq.js', () => ({
   chatCompletion: mockChatCompletion,
+  RateLimitError: MockRateLimitError,
 }));
 
 vi.mock('../database/investigation-store.js', () => ({

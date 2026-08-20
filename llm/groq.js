@@ -15,6 +15,15 @@ function getClient() {
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
+const MAX_RETRY_DELAY_MS = 30000;
+
+export class RateLimitError extends Error {
+  constructor(message, retryAfterMs) {
+    super(message);
+    this.name = 'RateLimitError';
+    this.retryAfterMs = retryAfterMs;
+  }
+}
 
 function isRetryableError(err) {
   const status = err?.status || err?.response?.status;
@@ -33,7 +42,7 @@ function getRetryDelay(attempt, err) {
   if (retryAfter) {
     const seconds = parseInt(retryAfter, 10);
     if (!isNaN(seconds) && seconds > 0) {
-      return seconds * 1000;
+      return Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
     }
   }
   const jitter = Math.random() * 500;
@@ -70,6 +79,17 @@ export async function chatCompletion({ messages, tools, temperature = 0.1 }) {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
       const delay = getRetryDelay(attempt - 1, lastError);
+      const is429 = lastError?.status === 429 || lastError?.response?.status === 429;
+
+      if (is429 && delay >= MAX_RETRY_DELAY_MS) {
+        const retryAfterSec = Math.round(delay / 1000);
+        logger.error({ retryAfterSec }, 'Rate limit retry delay too long, failing fast');
+        throw new RateLimitError(
+          `Rate limit exceeded. Retry after ${retryAfterSec} seconds.`,
+          delay,
+        );
+      }
+
       logger.warn({ attempt, delay, error: lastError?.message }, 'Retrying Groq API call');
       await new Promise(resolve => setTimeout(resolve, delay));
     }

@@ -2,6 +2,7 @@ import pino from 'pino';
 import { testConnection } from '../database/mysql.js';
 import { runInvestigation } from '../agent/agent.js';
 import { getInvestigation, listInvestigations } from '../database/investigation-store.js';
+import { RateLimitError } from '../llm/groq.js';
 import env from '../config/env.js';
 
 const logger = pino({ name: 'controller' });
@@ -37,6 +38,16 @@ export async function investigate(req, res) {
     const result = await runInvestigation(trimmed);
     res.json(result);
   } catch (err) {
+    if (err instanceof RateLimitError) {
+      const retryAfterSec = Math.ceil(err.retryAfterMs / 1000);
+      logger.warn({ retryAfterSec }, 'Rate limit exceeded');
+      return res.status(429).json({
+        error: 'LLM rate limit exceeded',
+        retryAfterSeconds: retryAfterSec,
+        detail: err.message,
+        suggestion: 'Upgrade your Groq tier at https://console.groq.com/settings/billing or try again later.',
+      });
+    }
     logger.error({ err: err.message }, 'Investigation failed');
     res.status(500).json({ error: 'Investigation failed', detail: err.message });
   }

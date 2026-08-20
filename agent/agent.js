@@ -5,7 +5,7 @@ import { ToolRegistry } from '../tools/registry.js';
 import { schemaTool } from '../tools/schema.tool.js';
 import { sqlTool } from '../tools/sql.tool.js';
 import { statsTool } from '../tools/stats.tool.js';
-import { chatCompletion } from '../llm/groq.js';
+import { chatCompletion, RateLimitError } from '../llm/groq.js';
 import { createInvestigation, addStep, finalizeInvestigation } from '../database/investigation-store.js';
 
 const logger = pino({ name: 'agent' });
@@ -139,6 +139,10 @@ export async function runInvestigation(userQuestion) {
       } catch (finalizeErr) {
         logger.error({ err: finalizeErr.message }, 'Failed to finalize investigation');
       }
+    }
+
+    if (err instanceof RateLimitError) {
+      throw err;
     }
   }
 

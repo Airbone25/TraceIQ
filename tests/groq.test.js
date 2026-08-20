@@ -315,5 +315,54 @@ describe('Groq Client', () => {
       const params = mockCreate.mock.calls[0][0];
       expect(params.model).toBe('openai/gpt-oss-120b');
     });
+
+    it('should throw RateLimitError when retry delay exceeds cap', async () => {
+      const rateLimitError = new Error('Rate limit exceeded');
+      rateLimitError.status = 429;
+      rateLimitError.headers = { 'retry-after': '900' };
+
+      mockCreate.mockRejectedValue(rateLimitError);
+
+      const { RateLimitError } = await import('../llm/groq.js');
+      await expect(
+        chatCompletion({ messages: [{ role: 'user', content: 'Q' }] }),
+      ).rejects.toThrow(RateLimitError);
+
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('should include retryAfterMs in RateLimitError', async () => {
+      const rateLimitError = new Error('Rate limit exceeded');
+      rateLimitError.status = 429;
+      rateLimitError.headers = { 'retry-after': '120' };
+
+      mockCreate.mockRejectedValue(rateLimitError);
+
+      const { RateLimitError } = await import('../llm/groq.js');
+      try {
+        await chatCompletion({ messages: [{ role: 'user', content: 'Q' }] });
+        expect.fail('Should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(RateLimitError);
+        expect(err.retryAfterMs).toBe(30000);
+        expect(err.message).toContain('30 seconds');
+      }
+    });
+
+    it('should cap retry delay to MAX_RETRY_DELAY_MS', async () => {
+      const rateLimitError = new Error('Rate limit');
+      rateLimitError.status = 429;
+      rateLimitError.headers = { 'retry-after': '600' };
+
+      mockCreate.mockRejectedValue(rateLimitError);
+
+      const { RateLimitError } = await import('../llm/groq.js');
+      try {
+        await chatCompletion({ messages: [{ role: 'user', content: 'Q' }] });
+        expect.fail('Should have thrown');
+      } catch (err) {
+        expect(err.retryAfterMs).toBe(30000);
+      }
+    });
   });
 });
