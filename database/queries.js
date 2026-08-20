@@ -5,9 +5,11 @@ export async function getSchemaInfo() {
   const tableNames = tables.map(row => Object.values(row)[0]);
 
   const schema = {};
-  for (const table of tableNames) {
-    const columns = await rawQuery(`SHOW COLUMNS FROM \`${table}\``);
-    const indexes = await rawQuery(`SHOW INDEX FROM \`${table}\``);
+  await Promise.all(tableNames.map(async (table) => {
+    const [columns, indexes] = await Promise.all([
+      rawQuery(`SHOW COLUMNS FROM \`${table}\``),
+      rawQuery(`SHOW INDEX FROM \`${table}\``),
+    ]);
     schema[table] = {
       columns: columns.map(c => ({
         name: c.Field,
@@ -22,7 +24,7 @@ export async function getSchemaInfo() {
         unique: !i.Non_unique,
       })),
     };
-  }
+  }));
   return schema;
 }
 
