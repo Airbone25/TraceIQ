@@ -12,6 +12,8 @@ import { runScenario } from '../evaluation/runner.js';
 import russianOrderDecline from '../evaluation/scenarios/russian-order-decline.js';
 import mobilePaymentFailures from '../evaluation/scenarios/mobile-payment-failures.js';
 import enterpriseBulkCancellation from '../evaluation/scenarios/enterprise-bulk-cancellation.js';
+import deactivatedProductSurge from '../evaluation/scenarios/deactivated-product-surge.js';
+import usaMobileCheckoutDrop from '../evaluation/scenarios/usa-mobile-checkout-drop.js';
 
 describe('Evaluation Assertions', () => {
   describe('assertAnswerContains', () => {
@@ -210,5 +212,21 @@ describe('Scenario Definitions', () => {
     expect(enterpriseBulkCancellation.groundTruth).toBeTruthy();
     expect(enterpriseBulkCancellation.acceptableFindings).toBeInstanceOf(Array);
     expect(enterpriseBulkCancellation.requiredKeywords).toBeInstanceOf(Array);
+  });
+
+  it('deactivated-product-surge should have required fields', () => {
+    expect(deactivatedProductSurge.id).toBeTruthy();
+    expect(deactivatedProductSurge.question).toBeTruthy();
+    expect(deactivatedProductSurge.groundTruth).toBeTruthy();
+    expect(deactivatedProductSurge.acceptableFindings).toBeInstanceOf(Array);
+    expect(deactivatedProductSurge.requiredKeywords).toBeInstanceOf(Array);
+  });
+
+  it('usa-mobile-checkout-drop should have required fields', () => {
+    expect(usaMobileCheckoutDrop.id).toBeTruthy();
+    expect(usaMobileCheckoutDrop.question).toBeTruthy();
+    expect(usaMobileCheckoutDrop.groundTruth).toBeTruthy();
+    expect(usaMobileCheckoutDrop.acceptableFindings).toBeInstanceOf(Array);
+    expect(usaMobileCheckoutDrop.requiredKeywords).toBeInstanceOf(Array);
   });
 });

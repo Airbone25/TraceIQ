@@ -8,7 +8,7 @@ An autonomous agent that investigates business questions by exploring a MySQL da
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-309%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-321%20passing-brightgreen)](#testing)
 
 </div>
 
@@ -307,14 +307,16 @@ npm run eval -- --only=russian-order-decline              # Single scenario
 npm run eval -- --only=mobile-payment-failures,enterprise-bulk-cancellation  # Multiple
 ```
 
-Available scenario IDs: `russian-order-decline`, `mobile-payment-failures`, `enterprise-bulk-cancellation`.
+Available scenario IDs: `russian-order-decline`, `mobile-payment-failures`, `enterprise-bulk-cancellation`, `deactivated-product-surge`, `usa-mobile-checkout-drop`.
 
 > **Free-tier economics:** Each scenario consumes roughly 30–60k tokens. Groq's free tier allows ~200k tokens/day, so a full eval run uses most of the daily budget. Use `--only` to rerun individual failed scenarios without exhausting the limit.
 
-The evaluation tests 3 scenarios against the seeded anomalies:
+The evaluation tests 5 scenarios against the seeded anomalies:
 1. **Russian Order Decline** — agent should identify country-based order stoppage
 2. **Mobile Payment Failures** — agent should identify device-specific payment failure spike
 3. **Enterprise Bulk Cancellation** — agent should identify enterprise customer cancellation pattern
+4. **Deactivated Product** — agent should find the inactive Legacy Adapter and its sales status
+5. **USA Mobile Checkout Drop** — agent should detect the recent decline in USA mobile orders
 
 When an investigation exhausts its step/time budget before concluding naturally, the agent injects an endgame nudge and then makes one forced synthesis call to produce the best answer from gathered evidence instead of returning empty results.
 
@@ -352,7 +354,9 @@ traceiq/
 │   └── scenarios/              # Evaluation scenario definitions
 │       ├── russian-order-decline.js
 │       ├── mobile-payment-failures.js
-│       └── enterprise-bulk-cancellation.js
+│       ├── enterprise-bulk-cancellation.js
+│       ├── deactivated-product-surge.js
+│       └── usa-mobile-checkout-drop.js
 ├── routes/
 │   └── investigation.routes.js # API route definitions
 ├── controllers/
@@ -418,12 +422,13 @@ npm run eval
 | `context.test.js` | 14 | History compression: stubs, message shape, budgets |
 | `database.test.js` | 2 | MySQL connectivity, correct database |
 | `endgame.test.js` | 17 | Endgame nudges, forced synthesis, tool result caching |
-| `evaluation.test.js` | 23 | Evaluation assertions, scenario runner, definitions |
+| `evaluation.test.js` | 25 | Evaluation assertions, scenario runner, definitions |
 | `groq.test.js` | 18 | LLM client, error handling, retries, configurable model |
 | `health.test.js` | 7 | Health endpoint, input validation, async 202 queueing |
 | `investigation-store.test.js` | 13 | CRUD operations, ID generation, thread association |
 | `job-runner.test.js` | 8 | Background execution, assistant message persistence, queue timeouts |
 | `performance.test.js` | 18 | SQL dedup, batch handling, limits |
+| `prompts.test.js` | 3 | System prompt heuristics: symptom digging, per-group rates |
 | `rate-limiter.test.js` | 9 | Concurrency guard: queueing, FIFO, timeouts |
 | `schema.test.js` | 4 | All tables exist, columns, foreign keys |
 | `seed.test.js` | 8 | Row counts, all anomalies present |

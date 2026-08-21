@@ -3,12 +3,16 @@ import { runScenario } from '../evaluation/runner.js';
 import russianOrderDecline from '../evaluation/scenarios/russian-order-decline.js';
 import mobilePaymentFailures from '../evaluation/scenarios/mobile-payment-failures.js';
 import enterpriseBulkCancellation from '../evaluation/scenarios/enterprise-bulk-cancellation.js';
+import deactivatedProductSurge from '../evaluation/scenarios/deactivated-product-surge.js';
+import usaMobileCheckoutDrop from '../evaluation/scenarios/usa-mobile-checkout-drop.js';
 import { closePool } from '../database/mysql.js';
 
 const allScenarios = [
   russianOrderDecline,
   mobilePaymentFailures,
   enterpriseBulkCancellation,
+  deactivatedProductSurge,
+  usaMobileCheckoutDrop,
 ];
 
 function parseScenarioFilter(argv) {
