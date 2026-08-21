@@ -19,6 +19,7 @@ export function createAgentState(userQuestion) {
     sqlDurations: [],
     failedToolCalls: 0,
     overheadDuration: 0,
+    nudged: false,
   };
 }
 
@@ -32,6 +33,27 @@ export function canRunSql(state) {
 
 export function hasTimedOut(state) {
   return (Date.now() - state.startTime) >= env.MAX_EXECUTION_TIME_MS;
+}
+
+export function stepsRemaining(state) {
+  return Math.max(0, env.MAX_AGENT_STEPS - state.steps);
+}
+
+export function timeRemainingMs(state) {
+  return Math.max(0, env.MAX_EXECUTION_TIME_MS - (Date.now() - state.startTime));
+}
+
+export function shouldNudge(state) {
+  if (state.status !== 'running' || state.nudged) {
+    return false;
+  }
+  return stepsRemaining(state) <= 2 || timeRemainingMs(state) <= env.MAX_EXECUTION_TIME_MS * 0.3;
+}
+
+export function buildNudgeMessage(state) {
+  const steps = stepsRemaining(state);
+  const seconds = Math.ceil(timeRemainingMs(state) / 1000);
+  return `URGENT: Budget nearly exhausted. You have approximately ${steps} step(s) and ${seconds} seconds remaining. Stop exploring. Use the evidence already gathered to prepare your final answer now.`;
 }
 
 export function isDuplicateSql(state, sql) {

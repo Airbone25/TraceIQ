@@ -5,14 +5,38 @@ import mobilePaymentFailures from '../evaluation/scenarios/mobile-payment-failur
 import enterpriseBulkCancellation from '../evaluation/scenarios/enterprise-bulk-cancellation.js';
 import { closePool } from '../database/mysql.js';
 
-const scenarios = [
+const allScenarios = [
   russianOrderDecline,
   mobilePaymentFailures,
   enterpriseBulkCancellation,
 ];
 
+function parseScenarioFilter(argv) {
+  const onlyArg = argv.find(a => a.startsWith('--only='));
+  if (!onlyArg) return null;
+  return onlyArg
+    .split('=')[1]
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 async function main() {
+  const onlyIds = parseScenarioFilter(process.argv.slice(2));
+  let scenarios = allScenarios;
+  if (onlyIds) {
+    scenarios = allScenarios.filter(s => onlyIds.includes(s.id));
+    if (scenarios.length === 0) {
+      console.error(`No scenarios match filter: --only=${onlyIds.join(',')}`);
+      console.error(`Available scenarios: ${allScenarios.map(s => s.id).join(', ')}`);
+      process.exit(1);
+    }
+  }
+
   console.log('=== TraceIQ Evaluation Framework ===\n');
+  if (onlyIds) {
+    console.log(`Filtered to scenarios: ${scenarios.map(s => s.id).join(', ')}\n`);
+  }
 
   const results = [];
 

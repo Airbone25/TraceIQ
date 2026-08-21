@@ -8,7 +8,7 @@ An autonomous agent that investigates business questions by exploring a MySQL da
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-254%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-271%20passing-brightgreen)](#testing)
 
 </div>
 
@@ -91,6 +91,7 @@ The core design enforces a strict separation of concerns: the LLM never directly
 - **Structured logging** — Pino-based JSON logging across all layers
 - **LLM retry with backoff** — automatic retry on transient API errors (429, 413 token-limit, 500, 502, 503) with exponential backoff
 - **Context protection** — configurable `max_tokens`, tool result truncation, conversation history compression, and retryable handling of provider TPM limits (e.g., Groq free tier)
+- **Convergence safeguards** — endgame nudge as budgets run low, forced final synthesis when limits hit, and per-investigation tool result caching to avoid repeat queries
 - **Concurrency guard** — in-process rate limiter queues or rejects overlapping investigations so parallel requests cannot exhaust provider token budgets
 
 ## Tech Stack
@@ -286,12 +287,20 @@ TraceIQ includes a deterministic evaluation framework for measuring agent perfor
 
 ```bash
 npm run eval    # Run all evaluation scenarios (requires live Groq API + MySQL)
+npm run eval -- --only=russian-order-decline              # Single scenario
+npm run eval -- --only=mobile-payment-failures,enterprise-bulk-cancellation  # Multiple
 ```
+
+Available scenario IDs: `russian-order-decline`, `mobile-payment-failures`, `enterprise-bulk-cancellation`.
+
+> **Free-tier economics:** Each scenario consumes roughly 30–60k tokens. Groq's free tier allows ~200k tokens/day, so a full eval run uses most of the daily budget. Use `--only` to rerun individual failed scenarios without exhausting the limit.
 
 The evaluation tests 3 scenarios against the seeded anomalies:
 1. **Russian Order Decline** — agent should identify country-based order stoppage
 2. **Mobile Payment Failures** — agent should identify device-specific payment failure spike
 3. **Enterprise Bulk Cancellation** — agent should identify enterprise customer cancellation pattern
+
+When an investigation exhausts its step/time budget before concluding naturally, the agent injects an endgame nudge and then makes one forced synthesis call to produce the best answer from gathered evidence instead of returning empty results.
 
 ## Project Structure
 
@@ -384,6 +393,7 @@ npm run eval
 | `config.test.js` | 2 | Configuration determinism in test mode |
 | `context.test.js` | 14 | History compression: stubs, message shape, budgets |
 | `database.test.js` | 2 | MySQL connectivity, correct database |
+| `endgame.test.js` | 17 | Endgame nudges, forced synthesis, tool result caching |
 | `evaluation.test.js` | 23 | Evaluation assertions, scenario runner, definitions |
 | `groq.test.js` | 18 | LLM client, error handling, retries, configurable model |
 | `health.test.js` | 7 | Health endpoint, input validation, question length, list investigations |

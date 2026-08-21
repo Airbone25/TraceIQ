@@ -114,7 +114,7 @@ describe('Performance Tests', () => {
       const result = await runInvestigation('Keep going');
       expect(result.steps).toBe(8);
       expect(result.toolCalls).toHaveLength(8);
-      expect(mockChatCompletion).toHaveBeenCalledTimes(8);
+      expect(mockChatCompletion).toHaveBeenCalledTimes(9);
     });
   });
 

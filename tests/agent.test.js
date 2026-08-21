@@ -260,7 +260,7 @@ describe('Agent Runtime', () => {
     expect(result.steps).toBe(8);
     expect(result.answer).toContain('step/timeout limit');
     expect(result.toolCalls).toHaveLength(8);
-    expect(mockChatCompletion).toHaveBeenCalledTimes(8);
+    expect(mockChatCompletion).toHaveBeenCalledTimes(9);
   });
 
   it('should stop at MAX_SQL_QUERIES', async () => {

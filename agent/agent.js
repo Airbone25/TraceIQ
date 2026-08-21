@@ -1,7 +1,7 @@
 import pino from 'pino';
 import env from '../config/env.js';
 import { buildSystemPrompt } from './prompts.js';
-import { createAgentState, canTakeStep, canRunSql, hasTimedOut, isDuplicateSql, recordToolCall, recordLlmCall, markCompleted, markFailed } from './state.js';
+import { createAgentState, canTakeStep, canRunSql, hasTimedOut, isDuplicateSql, recordToolCall, recordLlmCall, markCompleted, markFailed, shouldNudge, buildNudgeMessage } from './state.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { schemaTool } from '../tools/schema.tool.js';
 import { sqlTool } from '../tools/sql.tool.js';
@@ -30,6 +30,25 @@ function truncateForHistory(result) {
   return trimmed + `...[truncated ${json.length - trimmed.length} chars to fit context]`;
 }
 
+const CACHED_TOOLS = new Set(['get_schema', 'get_stats']);
+const LIMIT_REACHED_MESSAGE = 'Investigation reached step/timeout limit. Partial results may be available in the step history.';
+const SYNTHESIS_PROMPT = 'Your investigation budget is exhausted. Based ONLY on the evidence already gathered in this conversation, write your final answer now in the required format (Conclusion / Key Evidence / Confidence). Do not attempt any further tool calls.';
+
+async function forceFinalSynthesis(messages, state) {
+  try {
+    logger.info('Investigation budget exhausted; forcing final synthesis');
+    const response = await chatCompletion({
+      messages: [...messages, { role: 'user', content: SYNTHESIS_PROMPT }],
+    });
+    recordLlmCall(state, response);
+    const content = response.message?.content?.trim();
+    return content ? content : null;
+  } catch (err) {
+    logger.warn({ err: err.message }, 'Forced final synthesis failed');
+    return null;
+  }
+}
+
 export async function runInvestigation(userQuestion) {
   const state = createAgentState(userQuestion);
   let investigationId = null;
@@ -44,10 +63,17 @@ export async function runInvestigation(userQuestion) {
     ];
 
     const toolDefs = registry.getDefinitions();
+    const toolCache = new Map();
     let lastToolBatchEnd = state.startTime;
 
     while (canTakeStep(state) && !hasTimedOut(state)) {
       state.overheadDuration += Date.now() - lastToolBatchEnd;
+
+      if (shouldNudge(state)) {
+        state.nudged = true;
+        messages.push({ role: 'system', content: buildNudgeMessage(state) });
+        logger.info({ step: state.steps }, 'Endgame nudge injected');
+      }
 
       messages = compressHistory(messages);
       const response = await chatCompletion({ messages, tools: toolDefs });
@@ -100,10 +126,19 @@ export async function runInvestigation(userQuestion) {
         logger.info({ tool: toolName, step: state.steps + 1 }, 'Executing tool');
         const start = Date.now();
         let result;
-        try {
-          result = await registry.execute(toolName, toolInput);
-        } catch (err) {
-          result = { success: false, error: err.message };
+        const cacheKey = `${toolName}:${JSON.stringify(toolInput)}`;
+        if (CACHED_TOOLS.has(toolName) && toolCache.has(cacheKey)) {
+          result = { ...toolCache.get(cacheKey), cached: true };
+          logger.info({ tool: toolName, step: state.steps + 1 }, 'Tool cache hit');
+        } else {
+          try {
+            result = await registry.execute(toolName, toolInput);
+          } catch (err) {
+            result = { success: false, error: err.message };
+          }
+          if (CACHED_TOOLS.has(toolName) && result?.success !== false && !result?.error) {
+            toolCache.set(cacheKey, result);
+          }
         }
         const duration = Date.now() - start;
         state.toolDuration += duration;
@@ -127,7 +162,8 @@ export async function runInvestigation(userQuestion) {
     }
 
     if (state.status === 'running') {
-      markCompleted(state, 'Investigation reached step/timeout limit. Partial results may be available in the step history.');
+      const synthesized = await forceFinalSynthesis(messages, state);
+      markCompleted(state, synthesized || LIMIT_REACHED_MESSAGE);
     }
 
     await finalizeInvestigation(investigationId, {
