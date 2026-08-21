@@ -74,11 +74,12 @@ export async function hasActiveRun(threadId) {
 }
 
 export async function getThreadContext(threadId, maxTurns) {
+  const limit = Math.max(1, Math.min(50, Math.floor(Number(maxTurns) || 1)));
   const rows = await query(
     `SELECT question, final_answer FROM investigations
      WHERE thread_id = ? AND status = 'completed' AND final_answer IS NOT NULL
-     ORDER BY started_at DESC LIMIT ?`,
-    [threadId, maxTurns]
+     ORDER BY started_at DESC LIMIT ${limit}`,
+    [threadId]
   );
   return rows.reverse().map(r => ({ question: r.question, answer: r.final_answer }));
 }

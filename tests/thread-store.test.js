@@ -144,7 +144,27 @@ describe('Thread Store', () => {
         { question: 'Q2', answer: 'A2' },
         { question: 'Q3', answer: 'A3' },
       ]);
-      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('LIMIT ?'), ['t1', 2]);
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('LIMIT 2'),
+        ['t1']
+      );
+    });
+
+    it('should inline a sanitized integer LIMIT (regression: prepared statements reject LIMIT ?)', async () => {
+      mockQuery.mockResolvedValueOnce([]);
+      await getThreadContext('t1', 3);
+      expect(mockQuery.mock.calls[0][0]).toMatch(/LIMIT \d+$/);
+      expect(mockQuery.mock.calls[0][0]).not.toContain('LIMIT ?');
+      expect(mockQuery.mock.calls[0][1]).toEqual(['t1']);
+    });
+
+    it('should clamp non-numeric or out-of-range limits', async () => {
+      mockQuery.mockResolvedValue([]);
+      await getThreadContext('t1', undefined);
+      await getThreadContext('t1', 999);
+      const sqls = mockQuery.mock.calls.map(c => c[0]);
+      expect(sqls[0]).toContain('LIMIT 1');
+      expect(sqls[1]).toContain('LIMIT 50');
     });
 
     it('should return empty array for thread without completed runs', async () => {
