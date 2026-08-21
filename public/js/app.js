@@ -1,4 +1,5 @@
 const POLL_INTERVAL_MS = 2000;
+const NEAR_BOTTOM_THRESHOLD_PX = 80;
 
 const els = {
   threadList: document.getElementById('thread-list'),
@@ -15,6 +16,10 @@ let state = {
   activeThreadId: null,
   detail: null,
   pollTimer: null,
+  renderedThreadId: null,
+  renderedMessageCount: 0,
+  renderedStepCount: 0,
+  lastRunStatus: null,
 };
 
 async function api(path, options = {}) {
@@ -60,6 +65,18 @@ function formatDuration(ms) {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 }
 
+/* ---------- Scrolling ---------- */
+
+function isNearBottom() {
+  return els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < NEAR_BOTTOM_THRESHOLD_PX;
+}
+
+function scrollToBottomNow() {
+  els.messages.style.scrollBehavior = 'auto';
+  els.messages.scrollTop = els.messages.scrollHeight;
+  els.messages.style.scrollBehavior = '';
+}
+
 /* ---------- Sidebar ---------- */
 
 function renderSidebar() {
@@ -89,10 +106,6 @@ async function refreshThreads() {
 
 /* ---------- Messages ---------- */
 
-function clearMessages() {
-  els.messages.innerHTML = '<div class="messages-inner" id="messages-inner"></div>';
-}
-
 function messagesInner() {
   let inner = document.getElementById('messages-inner');
   if (!inner) {
@@ -102,11 +115,13 @@ function messagesInner() {
   return inner;
 }
 
-function scrollBottom() {
-  els.messages.scrollTop = els.messages.scrollHeight;
+function clearMessages() {
+  els.messages.innerHTML = '<div class="messages-inner" id="messages-inner"></div>';
+  state.renderedMessageCount = 0;
+  state.renderedStepCount = 0;
 }
 
-function addMessageBubble(role, content, meta) {
+function buildMessageBubble(role, content, meta) {
   const msg = document.createElement('div');
   msg.className = `msg ${role}`;
   const bubble = document.createElement('div');
@@ -124,34 +139,47 @@ function addMessageBubble(role, content, meta) {
     }
   }
   msg.appendChild(bubble);
-  messagesInner().appendChild(msg);
-  scrollBottom();
+  return msg;
 }
 
-function renderProgressCard(steps) {
-  const existing = document.getElementById('progress-card');
-  if (existing) existing.remove();
+function appendMessage(role, content, meta) {
+  messagesInner().appendChild(buildMessageBubble(role, content, meta));
+  state.renderedMessageCount++;
+}
 
-  const card = document.createElement('div');
-  card.className = 'msg assistant';
-  card.id = 'progress-card';
-  const items = steps.map(s => `
-    <li>
+/* ---------- Progress card ---------- */
+
+function ensureProgressCard() {
+  let card = document.getElementById('progress-card');
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'msg assistant';
+    card.id = 'progress-card';
+    card.innerHTML = `
+      <div class="progress-card">
+        <div class="progress-header"><span class="spinner"></span> <span class="progress-label">Investigating...</span></div>
+        <ul class="step-list"></ul>
+      </div>`;
+    messagesInner().appendChild(card);
+    state.renderedStepCount = 0;
+  }
+  return card;
+}
+
+function updateProgressCard(steps) {
+  const card = ensureProgressCard();
+  const ul = card.querySelector('.step-list');
+  for (let i = state.renderedStepCount; i < steps.length; i++) {
+    const s = steps[i];
+    const li = document.createElement('li');
+    li.innerHTML = `
       <span class="tool">${escapeHtml(s.tool_name)}</span>
       ${s.tool_input?.sql ? escapeHtml(String(s.tool_input.sql).substring(0, 60)) : ''}
-      <span class="dur">${formatDuration(s.duration_ms)}</span>
-    </li>`).join('');
-  card.innerHTML = `
-    <div class="progress-card">
-      <div class="progress-header"><span class="spinner"></span> Investigating... ${steps.length} step(s)</div>
-      <ul class="step-list">${items}</ul>
-    </div>`;
-  messagesInner().appendChild(card);
-  scrollBottom();
-}
-
-function removeProgressCard() {
-  document.getElementById('progress-card')?.remove();
+      <span class="dur">${formatDuration(s.duration_ms)}</span>`;
+    ul.appendChild(li);
+  }
+  state.renderedStepCount = steps.length;
+  card.querySelector('.progress-label').textContent = `Investigating... ${steps.length} step(s)`;
 }
 
 /* ---------- Thread view / polling ---------- */
@@ -160,33 +188,61 @@ function latestRun(detail) {
   return detail.runs.length > 0 ? detail.runs[detail.runs.length - 1] : null;
 }
 
-function renderThread(detail) {
-  clearMessages();
-  for (const m of detail.messages) {
-    addMessageBubble(m.role, m.content);
-  }
-
+function renderTerminalAnswer(detail) {
   const run = latestRun(detail);
   const lastMsgRole = detail.messages.length > 0
     ? detail.messages[detail.messages.length - 1].role
     : null;
 
+  if (run && run.status === 'failed' && lastMsgRole === 'user') {
+    appendMessage('assistant', `Investigation failed: ${run.error || 'unknown error'}`, { failed: true });
+  } else if (run && run.status === 'completed' && lastMsgRole === 'user') {
+    appendMessage('assistant', run.final_answer || 'No answer generated.', {
+      duration: run.duration_ms,
+      steps: run.steps,
+      sqlQueries: run.sql_queries,
+    });
+  }
+}
+
+function fullRender(detail) {
+  clearMessages();
+  for (const m of detail.messages) {
+    appendMessage(m.role, m.content);
+  }
+  const run = latestRun(detail);
   if (run && run.status === 'running') {
-    renderProgressCard(detail.latestRunSteps || []);
+    updateProgressCard(detail.latestRunSteps || []);
     setComposerEnabled(false);
   } else {
-    removeProgressCard();
-    if (run && run.status === 'failed' && lastMsgRole === 'user') {
-      addMessageBubble('assistant', `Investigation failed: ${run.error || 'unknown error'}`, { failed: true });
-    } else if (run && run.status === 'completed' && lastMsgRole === 'user') {
-      addMessageBubble('assistant', run.final_answer || 'No answer generated.', {
-        duration: run.duration_ms,
-        steps: run.steps,
-        sqlQueries: run.sql_queries,
-      });
-    }
+    renderTerminalAnswer(detail);
     setComposerEnabled(true);
   }
+}
+
+function incrementalRender(detail) {
+  for (let i = state.renderedMessageCount; i < detail.messages.length; i++) {
+    appendMessage(detail.messages[i].role, detail.messages[i].content);
+  }
+  updateProgressCard(detail.latestRunSteps || []);
+  setComposerEnabled(false);
+}
+
+function renderThread(detail) {
+  const stick = isNearBottom();
+  const run = latestRun(detail);
+  const isNewThread = state.renderedThreadId !== state.activeThreadId;
+  const reachedTerminal = state.lastRunStatus === 'running' && run && run.status !== 'running';
+
+  if (isNewThread || reachedTerminal || !run || run.status !== 'running') {
+    fullRender(detail);
+  } else {
+    incrementalRender(detail);
+  }
+
+  state.renderedThreadId = state.activeThreadId;
+  state.lastRunStatus = run ? run.status : null;
+  if (stick) scrollToBottomNow();
 }
 
 async function openThread(threadId) {
@@ -204,13 +260,13 @@ async function pollOnce() {
     state.detail = body;
     renderThread(body);
 
-    const running = latestRun(body)?.status === 'running';
-    if (!running) {
+    if (latestRun(body)?.status !== 'running') {
       stopPolling();
       refreshThreads();
     }
   } catch (err) {
-    addMessageBubble('assistant', `Failed to load thread: ${err.message}`, { failed: true });
+    appendMessage('assistant', `Failed to load thread: ${err.message}`, { failed: true });
+    scrollToBottomNow();
     stopPolling();
   }
 }
@@ -232,21 +288,24 @@ function setComposerEnabled(enabled) {
   els.sendBtn.disabled = !enabled;
 }
 
+const EMPTY_STATE_HTML = `
+  <div class="empty-state">
+    <h2>Investigate your database</h2>
+    <p>Ask why a metric changed, which segment is affected, or what is driving a trend.<br>TraceIQ explores the data and reports findings with evidence.</p>
+    <div class="example-questions">
+      <button class="example-btn">Why did orders from Russia stop recently?</button>
+      <button class="example-btn">Why are payment failures spiking? Are certain user groups affected more?</button>
+      <button class="example-btn">Which products saw an unusual surge in sales?</button>
+    </div>
+  </div>`;
+
 function newThread() {
   stopPolling();
   state.activeThreadId = null;
   state.detail = null;
-  clearMessages();
-  els.messages.innerHTML = `
-    <div class="empty-state">
-      <h2>Investigate your database</h2>
-      <p>Ask why a metric changed, which segment is affected, or what is driving a trend.<br>TraceIQ explores the data and reports findings with evidence.</p>
-      <div class="example-questions">
-        <button class="example-btn">Why did orders from Russia stop recently?</button>
-        <button class="example-btn">Why are payment failures spiking? Are certain user groups affected more?</button>
-        <button class="example-btn">Which products saw an unusual surge in sales?</button>
-      </div>
-    </div>`;
+  state.renderedThreadId = null;
+  state.lastRunStatus = null;
+  els.messages.innerHTML = EMPTY_STATE_HTML;
   bindExampleButtons();
   renderSidebar();
   setComposerEnabled(true);
@@ -260,11 +319,6 @@ async function submitQuestion(event) {
 
   els.input.value = '';
   els.input.style.height = 'auto';
-
-  if (document.querySelector('.empty-state')) {
-    document.querySelector('.empty-state').remove();
-  }
-  addMessageBubble('user', question);
   setComposerEnabled(false);
 
   try {
@@ -280,7 +334,8 @@ async function submitQuestion(event) {
     await pollOnce();
     startPolling();
   } catch (err) {
-    addMessageBubble('assistant', err.message, { failed: true });
+    appendMessage('assistant', err.message, { failed: true });
+    scrollToBottomNow();
     setComposerEnabled(true);
   }
 }
@@ -315,7 +370,6 @@ function bindExampleButtons() {
 els.newThreadBtn.addEventListener('click', newThread);
 els.form.addEventListener('submit', submitQuestion);
 els.input.addEventListener('input', autoGrow);
-bindExampleButtons();
 
 checkHealth();
 setInterval(checkHealth, 30000);
