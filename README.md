@@ -8,7 +8,7 @@ An autonomous agent that investigates business questions by exploring a MySQL da
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-271%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-272%20passing-brightgreen)](#testing)
 
 </div>
 

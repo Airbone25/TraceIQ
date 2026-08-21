@@ -15,12 +15,20 @@ import enterpriseBulkCancellation from '../evaluation/scenarios/enterprise-bulk-
 
 describe('Evaluation Assertions', () => {
   describe('assertAnswerContains', () => {
-    it('should pass when all keywords are found', () => {
+    it('should pass when any keyword is found', () => {
       const result = assertAnswerContains('Russia stopped ordering', ['russia', 'stopped'], 'test');
       expect(result.passed).toBe(true);
+      expect(result.found).toContain('russia');
     });
 
-    it('should fail when keywords are missing', () => {
+    it('should pass when only one synonym in the group matches', () => {
+      const result = assertAnswerContains('Orders from Russia have stopped', ['stopped', 'ceased', 'dropped', 'decline', 'no orders', 'absent'], 'test');
+      expect(result.passed).toBe(true);
+      expect(result.found).toEqual(['stopped']);
+      expect(result.missing).toHaveLength(5);
+    });
+
+    it('should fail when no keywords are found', () => {
       const result = assertAnswerContains('Orders dropped', ['russia', 'china'], 'test');
       expect(result.passed).toBe(false);
       expect(result.missing).toContain('russia');

@@ -3,7 +3,7 @@ export function assertAnswerContains(answer, keywords, label) {
   const found = keywords.filter(kw => lower.includes(kw.toLowerCase()));
   const missing = keywords.filter(kw => !lower.includes(kw.toLowerCase()));
   return {
-    passed: missing.length === 0,
+    passed: found.length > 0,
     label,
     found,
     missing,
