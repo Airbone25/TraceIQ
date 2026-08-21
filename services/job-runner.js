@@ -2,7 +2,7 @@ import pino from 'pino';
 import { runInvestigation } from '../agent/agent.js';
 import { investigationRateLimiter } from '../llm/rate-limiter.js';
 import { finalizeInvestigation } from '../database/investigation-store.js';
-import { addMessage } from '../database/thread-store.js';
+import { addMessage, getThread } from '../database/thread-store.js';
 
 const logger = pino({ name: 'job-runner' });
 
@@ -38,7 +38,10 @@ async function executeJob({ investigationId, question, threadId, threadContext }
   try {
     const result = await runInvestigation(question, { investigationId, threadId, threadContext });
     if (threadId && result.status === 'completed' && result.answer) {
-      await addMessage(threadId, 'assistant', result.answer);
+      const thread = await getThread(threadId).catch(() => null);
+      if (thread) {
+        await addMessage(threadId, 'assistant', result.answer);
+      }
     }
     logger.info({ investigationId, status: result.status }, 'Background job finished');
     return result;

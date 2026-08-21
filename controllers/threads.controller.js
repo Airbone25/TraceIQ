@@ -10,6 +10,7 @@ import {
   getLatestRunSteps,
   hasActiveRun,
   getThreadContext,
+  deleteThread,
 } from '../database/thread-store.js';
 import { createInvestigation } from '../database/investigation-store.js';
 import { startJob } from '../services/job-runner.js';
@@ -95,5 +96,19 @@ export async function getThreadDetail(req, res) {
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to retrieve thread');
     res.status(500).json({ error: 'Failed to retrieve thread', detail: err.message });
+  }
+}
+
+export async function deleteThreadHandler(req, res) {
+  const { id } = req.params;
+  try {
+    const deleted = await deleteThread(id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Thread not found' });
+    }
+    res.status(204).send();
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to delete thread');
+    res.status(500).json({ error: 'Failed to delete thread', detail: err.message });
   }
 }

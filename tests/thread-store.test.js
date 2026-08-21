@@ -19,6 +19,7 @@ const {
   getLatestRunSteps,
   hasActiveRun,
   getThreadContext,
+  deleteThread,
 } = await import('../database/thread-store.js');
 
 describe('Thread Store', () => {
@@ -170,6 +171,33 @@ describe('Thread Store', () => {
     it('should return empty array for thread without completed runs', async () => {
       mockQuery.mockResolvedValueOnce([]);
       expect(await getThreadContext('t-new', 3)).toEqual([]);
+    });
+  });
+
+  describe('deleteThread', () => {
+    it('should return false without deleting when thread does not exist', async () => {
+      mockQuery.mockResolvedValueOnce([]);
+      expect(await deleteThread('missing')).toBe(false);
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it('should delete steps, investigations, messages, then the thread in order', async () => {
+      mockQuery
+        .mockResolvedValueOnce([{ id: 't1', title: 'A' }])
+        .mockResolvedValue([]);
+
+      expect(await deleteThread('t1')).toBe(true);
+      expect(mockQuery).toHaveBeenCalledTimes(5);
+
+      const sqls = mockQuery.mock.calls.slice(1).map(c => c[0]);
+      expect(sqls[0]).toContain('DELETE FROM investigation_steps');
+      expect(sqls[0]).toContain('WHERE investigation_id IN');
+      expect(sqls[1]).toContain('DELETE FROM investigations WHERE thread_id = ?');
+      expect(sqls[2]).toContain('DELETE FROM investigation_messages WHERE thread_id = ?');
+      expect(sqls[3]).toContain('DELETE FROM investigation_threads WHERE id = ?');
+
+      expect(mockQuery.mock.calls[1][1]).toEqual(['t1']);
+      expect(mockQuery.mock.calls[4][1]).toEqual(['t1']);
     });
   });
 });

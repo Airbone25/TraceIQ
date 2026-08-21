@@ -83,3 +83,19 @@ export async function getThreadContext(threadId, maxTurns) {
   );
   return rows.reverse().map(r => ({ question: r.question, answer: r.final_answer }));
 }
+
+export async function deleteThread(id) {
+  const existing = await getThread(id);
+  if (!existing) return false;
+
+  await query(
+    'DELETE FROM investigation_steps WHERE investigation_id IN (SELECT id FROM investigations WHERE thread_id = ?)',
+    [id]
+  );
+  await query('DELETE FROM investigations WHERE thread_id = ?', [id]);
+  await query('DELETE FROM investigation_messages WHERE thread_id = ?', [id]);
+  await query('DELETE FROM investigation_threads WHERE id = ?', [id]);
+
+  logger.info({ id }, 'Thread deleted');
+  return true;
+}

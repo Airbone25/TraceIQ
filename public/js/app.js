@@ -42,21 +42,56 @@ function inlineFormat(s) {
   return s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 }
 
+const NUMERIC_CELL = /^-?[\d,.]+%?$/;
+
+function isSeparatorLine(line) {
+  return /^[\s|:-]+$/.test(line);
+}
+
+function parseTableRow(line) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+}
+
+function buildTable(blockLines) {
+  const parsed = blockLines.map(parseTableRow);
+  const header = parsed[0];
+  const bodyRows = parsed.slice(1).filter((_, idx) => !(idx === 0 && isSeparatorLine(blockLines[1])));
+  const th = header.map(c => `<th>${inlineFormat(c)}</th>`).join('');
+  const tr = bodyRows
+    .map(cells => `<tr>${cells.map(c => `<td${NUMERIC_CELL.test(c) ? ' class="num"' : ''}>${inlineFormat(c)}</td>`).join('')}</tr>`)
+    .join('');
+  return `<div class="table-wrap"><table class="answer-table"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>`;
+}
+
 function renderRichText(text) {
   const lines = escapeHtml(text).split('\n');
   let html = '';
   let inList = false;
-  for (const line of lines) {
+  let i = 0;
+
+  const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim().startsWith('|')) {
+      closeList();
+      let j = i;
+      while (j < lines.length && lines[j].trim().startsWith('|')) j++;
+      html += buildTable(lines.slice(i, j));
+      i = j;
+      continue;
+    }
     const bullet = line.match(/^\s*[-*]\s+(.*)$/);
     if (bullet) {
       if (!inList) { html += '<ul>'; inList = true; }
       html += `<li>${inlineFormat(bullet[1])}</li>`;
     } else {
-      if (inList) { html += '</ul>'; inList = false; }
+      closeList();
       if (line.trim()) html += `<p>${inlineFormat(line)}</p>`;
     }
+    i++;
   }
-  if (inList) html += '</ul>';
+  closeList();
   return html;
 }
 
@@ -90,9 +125,25 @@ function renderSidebar() {
     li.className = 'thread-item' + (t.id === state.activeThreadId ? ' active' : '');
     li.innerHTML = `
       <span class="status-dot ${t.latest_status || 'queued'}"></span>
-      <span class="thread-title">${escapeHtml(t.title)}</span>`;
+      <span class="thread-title">${escapeHtml(t.title)}</span>
+      <button class="thread-delete-btn" title="Delete investigation">&#128465;</button>`;
     li.addEventListener('click', () => openThread(t.id));
+    li.querySelector('.thread-delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteThreadFlow(t.id, t.title);
+    });
     els.threadList.appendChild(li);
+  }
+}
+
+async function deleteThreadFlow(threadId, title) {
+  if (!confirm(`Delete this investigation?\n\n"${title}"\n\nThis permanently removes its messages and audit history.`)) return;
+  try {
+    await api(`/threads/${threadId}`, { method: 'DELETE' });
+    if (state.activeThreadId === threadId) newThread();
+    await refreshThreads();
+  } catch (err) {
+    alert(`Failed to delete: ${err.message}`);
   }
 }
 

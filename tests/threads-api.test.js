@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getLatestRunSteps: vi.fn().mockResolvedValue([]),
   hasActiveRun: vi.fn().mockResolvedValue(false),
   getThreadContext: vi.fn().mockResolvedValue([]),
+  deleteThread: vi.fn().mockResolvedValue(true),
   createInvestigation: vi.fn().mockResolvedValue({ id: 'inv-new', startedAt: new Date() }),
   getInvestigation: vi.fn().mockResolvedValue(null),
   listInvestigations: vi.fn().mockResolvedValue([]),
@@ -29,6 +30,7 @@ vi.mock('../database/thread-store.js', () => ({
   getLatestRunSteps: mocks.getLatestRunSteps,
   hasActiveRun: mocks.hasActiveRun,
   getThreadContext: mocks.getThreadContext,
+  deleteThread: mocks.deleteThread,
 }));
 
 vi.mock('../database/investigation-store.js', () => ({
@@ -168,6 +170,21 @@ describe('Threads API', () => {
     it('should return 404 for unknown thread', async () => {
       mocks.getThread.mockResolvedValue(null);
       const res = await request(app).get('/api/threads/missing');
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('DELETE /api/threads/:id', () => {
+    it('should delete the thread and return 204', async () => {
+      mocks.deleteThread.mockResolvedValue(true);
+      const res = await request(app).delete('/api/threads/t1');
+      expect(res.status).toBe(204);
+      expect(mocks.deleteThread).toHaveBeenCalledWith('t1');
+    });
+
+    it('should return 404 for unknown thread', async () => {
+      mocks.deleteThread.mockResolvedValue(false);
+      const res = await request(app).delete('/api/threads/nope');
       expect(res.status).toBe(404);
     });
   });

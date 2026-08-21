@@ -89,6 +89,22 @@ body {
 
 .thread-title { overflow: hidden; text-overflow: ellipsis; flex: 1; }
 
+.thread-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+.thread-item:hover .thread-delete-btn { opacity: 1; }
+.thread-delete-btn:hover { color: var(--danger); background: var(--bg-hover); }
+
 .status-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
@@ -150,6 +166,13 @@ body {
 .bubble p:last-child { margin-bottom: 0; }
 .bubble ul { margin: 4px 0 10px 20px; }
 .bubble li { margin-bottom: 4px; }
+
+.table-wrap { overflow-x: auto; margin: 4px 0 10px; }
+.answer-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.answer-table th, .answer-table td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+.answer-table th { background: var(--bg-composer); font-weight: 600; white-space: nowrap; }
+.answer-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.03); }
+.answer-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .answer-meta {
   margin-top: 12px;

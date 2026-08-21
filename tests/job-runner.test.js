@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockRunInvestigation, mockAcquire, mockRelease, mockFinalize, mockAddMessage } = vi.hoisted(() => ({
+const { mockRunInvestigation, mockAcquire, mockRelease, mockFinalize, mockAddMessage, mockGetThread } = vi.hoisted(() => ({
   mockRunInvestigation: vi.fn(),
   mockAcquire: vi.fn(),
   mockRelease: vi.fn(),
   mockFinalize: vi.fn().mockResolvedValue(undefined),
   mockAddMessage: vi.fn().mockResolvedValue(undefined),
+  mockGetThread: vi.fn().mockResolvedValue({ id: 'thread-1', title: 'T' }),
 }));
 
 vi.mock('../agent/agent.js', () => ({
@@ -22,6 +23,7 @@ vi.mock('../database/investigation-store.js', () => ({
 
 vi.mock('../database/thread-store.js', () => ({
   addMessage: mockAddMessage,
+  getThread: mockGetThread,
 }));
 
 import { startJob, isJobActive, activeJobCount } from '../services/job-runner.js';
@@ -66,6 +68,15 @@ describe('Job Runner', () => {
 
     expect(mockAddMessage).not.toHaveBeenCalled();
     expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+
+  it('should skip assistant message when thread was deleted during the run', async () => {
+    mockGetThread.mockResolvedValueOnce(null);
+
+    await startJob({ investigationId: 'inv-9', question: 'Deleted mid-run?', threadId: 'thread-9' });
+
+    expect(mockGetThread).toHaveBeenCalledWith('thread-9');
+    expect(mockAddMessage).not.toHaveBeenCalled();
   });
 
   it('should not persist assistant message when completed answer is empty', async () => {
