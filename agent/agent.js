@@ -1,4 +1,5 @@
 import pino from 'pino';
+import env from '../config/env.js';
 import { buildSystemPrompt } from './prompts.js';
 import { createAgentState, canTakeStep, canRunSql, hasTimedOut, isDuplicateSql, recordToolCall, recordLlmCall, markCompleted, markFailed } from './state.js';
 import { ToolRegistry } from '../tools/registry.js';
@@ -14,6 +15,19 @@ const registry = new ToolRegistry();
 registry.register(schemaTool);
 registry.register(sqlTool);
 registry.register(statsTool);
+
+function truncateForHistory(result) {
+  const json = JSON.stringify(result);
+  if (json.length <= env.MAX_TOOL_RESULT_CHARS) {
+    return json;
+  }
+  const truncated = { ...result, data: result.data?.slice?.(0, Math.max(1, Math.floor(result.data.length / 2))) };
+  let trimmed = JSON.stringify(truncated);
+  if (trimmed.length > env.MAX_TOOL_RESULT_CHARS) {
+    trimmed = trimmed.substring(0, env.MAX_TOOL_RESULT_CHARS);
+  }
+  return trimmed + `...[truncated ${json.length - trimmed.length} chars to fit context]`;
+}
 
 export async function runInvestigation(userQuestion) {
   const state = createAgentState(userQuestion);
@@ -103,7 +117,7 @@ export async function runInvestigation(userQuestion) {
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: JSON.stringify(result),
+          content: truncateForHistory(result),
         });
         await persistStep(investigationId, state, toolName, toolInput, result, duration);
       }

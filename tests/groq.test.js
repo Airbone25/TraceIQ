@@ -18,6 +18,7 @@ vi.mock('../config/env.js', () => ({
   default: {
     GROQ_API_KEY: 'test-api-key',
     GROQ_MODEL: 'openai/gpt-oss-120b',
+    LLM_MAX_TOKENS: 1024,
   },
 }));
 
@@ -45,7 +46,7 @@ describe('Groq Client', () => {
     expect(params.model).toBe('openai/gpt-oss-120b');
     expect(params.messages).toBe(messages);
     expect(params.temperature).toBe(0.1);
-    expect(params.max_tokens).toBe(4096);
+    expect(params.max_tokens).toBe(1024);
     expect(params.tool_choice).toBe('auto');
     expect(params.tools).toHaveLength(1);
     expect(params.tools[0].type).toBe('function');

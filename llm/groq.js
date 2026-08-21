@@ -30,6 +30,9 @@ function isRetryableError(err) {
   if (status === 429 || status === 500 || status === 502 || status === 503) {
     return true;
   }
+  if (status === 413 && err?.error?.error?.code === 'rate_limit_exceeded') {
+    return true;
+  }
   const code = err?.code;
   if (code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ENOTFOUND') {
     return true;
@@ -57,7 +60,7 @@ export async function chatCompletion({ messages, tools, temperature = 0.1 }) {
     model,
     messages,
     temperature,
-    max_tokens: 4096,
+    max_tokens: env.LLM_MAX_TOKENS,
   };
 
   if (tools && tools.length > 0) {
@@ -79,9 +82,10 @@ export async function chatCompletion({ messages, tools, temperature = 0.1 }) {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
       const delay = getRetryDelay(attempt - 1, lastError);
-      const is429 = lastError?.status === 429 || lastError?.response?.status === 429;
+      const isRateLimit = [413, 429].includes(lastError?.status) ||
+        [413, 429].includes(lastError?.response?.status);
 
-      if (is429 && delay >= MAX_RETRY_DELAY_MS) {
+      if (isRateLimit && delay >= MAX_RETRY_DELAY_MS) {
         const retryAfterSec = Math.round(delay / 1000);
         logger.error({ retryAfterSec }, 'Rate limit retry delay too long, failing fast');
         throw new RateLimitError(

@@ -8,7 +8,7 @@ An autonomous agent that investigates business questions by exploring a MySQL da
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-227%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-230%20passing-brightgreen)](#testing)
 
 </div>
 
@@ -89,7 +89,8 @@ The core design enforces a strict separation of concerns: the LLM never directly
 - **Deterministic seed data** — realistic business dataset with intentional anomalies for agent evaluation
 - **Evaluation framework** — deterministic scenarios for measuring agent performance against known anomalies
 - **Structured logging** — Pino-based JSON logging across all layers
-- **LLM retry with backoff** — automatic retry on transient API errors (429, 500, 502, 503) with exponential backoff
+- **LLM retry with backoff** — automatic retry on transient API errors (429, 413 token-limit, 500, 502, 503) with exponential backoff
+- **Context protection** — configurable `max_tokens`, tool result truncation, and retryable handling of provider TPM limits (e.g., Groq free tier)
 
 ## Tech Stack
 
@@ -201,6 +202,8 @@ All configuration is via environment variables (loaded from `.env`):
 | `MAX_EXECUTION_TIME_MS` | `60000` | Max wall-clock time (ms) |
 | `MAX_QUERY_TIMEOUT_MS` | `30000` | MySQL query timeout (ms) |
 | `MAX_QUESTION_LENGTH` | `5000` | Max characters in input question |
+| `LLM_MAX_TOKENS` | `1024` | Max completion tokens per LLM call (counts toward provider TPM limits) |
+| `MAX_TOOL_RESULT_CHARS` | `4000` | Max characters of a tool result kept in LLM message history |
 
 ## Database Schema
 
