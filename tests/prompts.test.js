@@ -2,17 +2,24 @@ import { describe, it, expect } from 'vitest';
 import { buildSystemPrompt, buildStallMessage } from '../agent/prompts.js';
 
 describe('System Prompt Heuristics', () => {
-  it('should instruct digging past symptoms into payments and order states', () => {
+  it('should instruct digging past symptoms into related-table evidence', () => {
     const prompt = buildSystemPrompt();
-    expect(prompt).toContain('failure_reason');
-    expect(prompt).toContain('cancelled/refunded');
-    expect(prompt).toContain('surface the distinct failure_reason values');
+    expect(prompt).toContain('cancelled/refunded/failed');
+    expect(prompt).toContain('reason or error columns');
   });
 
   it('should instruct per-group rate computation over blended averages', () => {
     const prompt = buildSystemPrompt();
     expect(prompt.toLowerCase()).toContain('per group');
     expect(prompt.toLowerCase()).toContain('blended');
+  });
+
+  it('should describe generic tools instead of sales-domain stats', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('get_overview');
+    expect(prompt).not.toContain('daily_orders');
+    expect(prompt).not.toContain('payment_failures');
+    expect(prompt).not.toContain('orders_by_segment');
   });
 
   it('should keep existing efficiency and format sections intact', () => {

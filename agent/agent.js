@@ -5,7 +5,7 @@ import { createAgentState, canTakeStep, canRunSql, hasTimedOut, isDuplicateSql, 
 import { ToolRegistry } from '../tools/registry.js';
 import { schemaTool } from '../tools/schema.tool.js';
 import { sqlTool } from '../tools/sql.tool.js';
-import { statsTool } from '../tools/stats.tool.js';
+import { overviewTool } from '../tools/overview.tool.js';
 import { chatCompletion, RateLimitError } from '../llm/groq.js';
 import { compressHistory } from './context.js';
 import { createInvestigation, addStep, finalizeInvestigation } from '../database/investigation-store.js';
@@ -17,7 +17,7 @@ const STALL_THRESHOLD = 3;
 const registry = new ToolRegistry();
 registry.register(schemaTool);
 registry.register(sqlTool);
-registry.register(statsTool);
+registry.register(overviewTool);
 
 function truncateForHistory(result) {
   const json = JSON.stringify(result);
@@ -32,7 +32,7 @@ function truncateForHistory(result) {
   return trimmed + `...[truncated ${json.length - trimmed.length} chars to fit context]`;
 }
 
-const CACHED_TOOLS = new Set(['get_schema', 'get_stats']);
+const CACHED_TOOLS = new Set(['get_schema', 'get_overview']);
 const LIMIT_REACHED_MESSAGE = 'Investigation reached step/timeout limit. Partial results may be available in the step history.';
 const SYNTHESIS_PROMPT = 'Your investigation budget is exhausted. Based ONLY on the evidence already gathered in this conversation, write your final answer now in the required format (Conclusion / Key Evidence / Confidence). Do not attempt any further tool calls.';
 
@@ -68,6 +68,34 @@ function buildThreadContextMessage(threadContext) {
   ].join('\n');
 }
 
+async function loadDatabaseOverview() {
+  const result = await overviewTool.execute({});
+  if (!result?.success) {
+    throw new Error(result?.error || 'Overview unavailable');
+  }
+  return result;
+}
+
+function renderDatabaseOverview(overview) {
+  const lines = ['## Database Overview (auto-generated)', ''];
+  const tables = Array.isArray(overview.tables) ? overview.tables : [];
+  if (tables.length > 0) {
+    lines.push(`Tables: ${tables.map(t => `${t.name} (${t.rowCount} rows)`).join(', ')}`);
+  }
+  const ranges = Array.isArray(overview.dateRanges) ? overview.dateRanges : [];
+  if (ranges.length > 0) {
+    lines.push('');
+    lines.push('Time ranges:');
+    for (const r of ranges.slice(0, 20)) {
+      lines.push(`- ${r.table}.${r.column}: ${r.min} -> ${r.max}`);
+    }
+    if (ranges.length > 20) {
+      lines.push(`- ...and ${ranges.length - 20} more`);
+    }
+  }
+  return lines.join('\n');
+}
+
 export async function runInvestigation(userQuestion, options = {}) {
   const { investigationId: existingId = null, threadId = null, threadContext = [] } = options;
   const state = createAgentState(userQuestion);
@@ -82,6 +110,14 @@ export async function runInvestigation(userQuestion, options = {}) {
     let messages = [
       { role: 'system', content: buildSystemPrompt() },
     ];
+
+    try {
+      const overview = await loadDatabaseOverview();
+      messages.push({ role: 'system', content: renderDatabaseOverview(overview) });
+      logger.info('Database overview injected');
+    } catch (err) {
+      logger.warn({ err: err.message }, 'Database overview unavailable; continuing without it');
+    }
 
     if (threadContext.length > 0) {
       messages.push({ role: 'system', content: buildThreadContextMessage(threadContext) });

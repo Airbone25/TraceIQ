@@ -8,7 +8,7 @@ An autonomous agent that investigates business questions by exploring a MySQL da
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-324%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-330%20passing-brightgreen)](#testing)
 
 </div>
 
@@ -328,7 +328,7 @@ traceiq/
 │   └── env.js                  # Environment validation (Zod)
 ├── database/
 │   ├── mysql.js                # Connection pool, query helpers
-│   ├── queries.js              # Pre-built analytical queries
+│   ├── queries.js              # Generic schema introspection helpers
 │   ├── investigation-store.js  # Investigation persistence layer
 │   └── thread-store.js         # Thread/message persistence for follow-ups
 ├── services/
@@ -339,7 +339,7 @@ traceiq/
 │   ├── registry.js             # Tool registration and dispatch (Zod validation)
 │   ├── schema.tool.js          # get_schema tool
 │   ├── sql.tool.js             # execute_sql tool
-│   └── stats.tool.js           # get_stats tool
+│   └── overview.tool.js        # get_overview tool (row counts + date ranges, any schema)
 ├── agent/
 │   ├── agent.js                # Agentic loop orchestrator
 │   ├── context.js              # Conversation history compression
@@ -417,16 +417,17 @@ npm run eval
 
 | Test Suite | Tests | What It Validates |
 |-----------|-------|-------------------|
-| `agent.test.js` | 29 | Agent loop, tool dispatch, state limits, errors, thread context injection, stall guard |
+| `agent.test.js` | 31 | Agent loop, tool dispatch, state limits, errors, thread context injection, stall guard, overview injection |
 | `config.test.js` | 2 | Configuration determinism in test mode |
 | `context.test.js` | 14 | History compression: stubs, message shape, budgets |
 | `database.test.js` | 2 | MySQL connectivity, correct database |
 | `endgame.test.js` | 17 | Endgame nudges, forced synthesis, tool result caching |
-| `evaluation.test.js` | 25 | Evaluation assertions, scenario runner, definitions |
-| `groq.test.js` | 18 | LLM client, error handling, retries, configurable model |
+| `evaluation.test.js` | 26 | Evaluation assertions, scenario runner, definitions |
+| `groq.test.js` | 21 | LLM client, error handling, retries, configurable model |
 | `health.test.js` | 7 | Health endpoint, input validation, async 202 queueing |
-| `investigation-store.test.js` | 13 | CRUD operations, ID generation, thread association |
-| `job-runner.test.js` | 8 | Background execution, assistant message persistence, queue timeouts |
+| `investigation-store.test.js` | 14 | CRUD operations, ID generation, thread association |
+| `job-runner.test.js` | 9 | Background execution, assistant message persistence, queue timeouts |
+| `overview-tool.test.js` | 4 | Schema-agnostic overview: row counts, date ranges, partial failure |
 | `performance.test.js` | 18 | SQL dedup, batch handling, limits |
 | `prompts.test.js` | 4 | System prompt heuristics: symptom digging, per-group rates, stall message |
 | `rate-limiter.test.js` | 9 | Concurrency guard: queueing, FIFO, timeouts |
@@ -438,7 +439,7 @@ npm run eval
 | `thread-store.test.js` | 14 | Thread/message CRUD, active-run checks, context extraction |
 | `threads-api.test.js` | 11 | Thread endpoints: create, follow-ups (409), list, detail |
 | `tool-registry.test.js` | 12 | Registration, dispatch, errors |
-| `tool-validation.test.js` | 12 | Zod schema validation for all tools |
+| `tool-validation.test.js` | 11 | Zod schema validation for all tools |
 
 ## Database Management
 

@@ -9,7 +9,7 @@ if (process.env.NODE_ENV === 'test') {
 
 const envSchema = z.object({
   GROQ_API_KEY: z.string().min(1, 'GROQ_API_KEY is required'),
-  GROQ_MODEL: z.string().default('openai/gpt-oss-120b'),
+  GROQ_MODEL: z.string().default('groq/compound'),
   MYSQL_HOST: z.string().default('localhost'),
   MYSQL_PORT: z.coerce.number().int().positive().default(3306),
   MYSQL_USER: z.string().min(1, 'MYSQL_USER is required'),

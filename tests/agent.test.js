@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockChatCompletion, mockRegistryExecute, mockCreateInvestigation, mockAddStep, mockFinalizeInvestigation, MockRateLimitError } = vi.hoisted(() => {
+const { mockChatCompletion, mockRegistryExecute, mockOverviewExecute, mockCreateInvestigation, mockAddStep, mockFinalizeInvestigation, MockRateLimitError } = vi.hoisted(() => {
   class MockRateLimitError extends Error {
     constructor(message, retryAfterMs) {
       super(message);
@@ -14,6 +14,7 @@ const { mockChatCompletion, mockRegistryExecute, mockCreateInvestigation, mockAd
     mockCreateInvestigation: vi.fn().mockResolvedValue({ id: 'test-inv-id', startedAt: new Date() }),
     mockAddStep: vi.fn().mockResolvedValue(undefined),
     mockFinalizeInvestigation: vi.fn().mockResolvedValue(undefined),
+    mockOverviewExecute: vi.fn(),
     MockRateLimitError,
   };
 });
@@ -56,8 +57,8 @@ vi.mock('../tools/sql.tool.js', () => ({
   sqlTool: { name: 'execute_sql', description: 'mock', parameters: {}, execute: vi.fn() },
 }));
 
-vi.mock('../tools/stats.tool.js', () => ({
-  statsTool: { name: 'get_stats', description: 'mock', parameters: {}, execute: vi.fn() },
+vi.mock('../tools/overview.tool.js', () => ({
+  overviewTool: { name: 'get_overview', description: 'mock', parameters: {}, schema: {}, execute: mockOverviewExecute },
 }));
 
 vi.mock('../config/env.js', () => ({
@@ -98,6 +99,8 @@ describe('Agent Runtime', () => {
     mockChatCompletion.mockReset();
     mockRegistryExecute.mockReset();
     mockRegistryExecute.mockResolvedValue({ success: true, data: 'mock_result' });
+    mockOverviewExecute.mockReset();
+    mockOverviewExecute.mockRejectedValue(new Error('no overview in test'));
   });
 
   it('should complete investigation with final answer without tools', async () => {
@@ -188,7 +191,7 @@ describe('Agent Runtime', () => {
       .mockResolvedValueOnce({
         message: {
           content: null,
-          tool_calls: [toolCall('c3', 'get_stats', { stat: 'daily_orders' })],
+          tool_calls: [toolCall('c3', 'get_overview', { })],
         },
         finishReason: 'tool_calls',
         usage: {},
@@ -209,7 +212,7 @@ describe('Agent Runtime', () => {
     expect(result.toolCalls).toHaveLength(3);
     expect(result.toolCalls[0].toolName).toBe('get_schema');
     expect(result.toolCalls[1].toolName).toBe('execute_sql');
-    expect(result.toolCalls[2].toolName).toBe('get_stats');
+    expect(result.toolCalls[2].toolName).toBe('get_overview');
     expect(mockChatCompletion).toHaveBeenCalledTimes(4);
   });
 
@@ -220,7 +223,7 @@ describe('Agent Runtime', () => {
           content: null,
           tool_calls: [
             toolCall('c1', 'get_schema', {}),
-            toolCall('c2', 'get_stats', { stat: 'row_counts' }),
+            toolCall('c2', 'get_overview', { }),
           ],
         },
         finishReason: 'tool_calls',
@@ -240,7 +243,7 @@ describe('Agent Runtime', () => {
     expect(result.steps).toBe(2);
     expect(result.toolCalls).toHaveLength(2);
     expect(result.toolCalls[0].toolName).toBe('get_schema');
-    expect(result.toolCalls[1].toolName).toBe('get_stats');
+    expect(result.toolCalls[1].toolName).toBe('get_overview');
     expect(mockChatCompletion).toHaveBeenCalledTimes(2);
   });
 
@@ -268,7 +271,7 @@ describe('Agent Runtime', () => {
     const captured = [];
     const responses = [
       { message: { content: null, tool_calls: [toolCall('c1', 'get_schema', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
-      { message: { content: null, tool_calls: [toolCall('c2', 'get_stats', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
+      { message: { content: null, tool_calls: [toolCall('c2', 'get_overview', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
       { message: { content: null, tool_calls: [toolCall('c3', 'get_schema', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
       { message: { content: 'Final answer.', tool_calls: [] }, finishReason: 'stop', usage: {}, duration: 10 },
     ];
@@ -292,7 +295,7 @@ describe('Agent Runtime', () => {
     const responses = [
       { message: { content: null, tool_calls: [toolCall('c1', 'get_schema', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
       { message: { content: null, tool_calls: [toolCall('c2', 'execute_sql', { sql: 'SELECT COUNT(*) AS c FROM orders' })] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
-      { message: { content: null, tool_calls: [toolCall('c3', 'get_stats', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
+      { message: { content: null, tool_calls: [toolCall('c3', 'get_overview', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
       { message: { content: 'Done.', tool_calls: [] }, finishReason: 'stop', usage: {}, duration: 10 },
     ];
     let i = 0;
@@ -307,6 +310,41 @@ describe('Agent Runtime', () => {
     const callsWithNudge = captured.filter(msgs =>
       msgs.some(m => m.role === 'system' && String(m.content).includes('Stall nudge')));
     expect(callsWithNudge).toHaveLength(0);
+  });
+
+  it('should inject database overview as a system message when available', async () => {
+    mockOverviewExecute.mockResolvedValue({
+      success: true,
+      tables: [{ name: 'orders', rowCount: 120 }, { name: 'customers', rowCount: 20 }],
+      dateRanges: [{ table: 'orders', column: 'created_at', min: '2026-07-24', max: '2026-08-22' }],
+    });
+
+    let captured = null;
+    mockChatCompletion.mockImplementation((params) => {
+      if (!captured) captured = params.messages.map(m => ({ role: m.role, content: m.content }));
+      return Promise.resolve({ message: { content: 'Done.', tool_calls: [] }, finishReason: 'stop', usage: {}, duration: 10 });
+    });
+
+    const result = await runInvestigation('What changed?');
+
+    expect(result.status).toBe('completed');
+    const overviewMessage = captured.find(m => m.role === 'system' && String(m.content).includes('Database Overview'));
+    expect(overviewMessage).toBeDefined();
+    expect(overviewMessage.content).toContain('orders (120 rows)');
+    expect(overviewMessage.content).toContain('orders.created_at: 2026-07-24 -> 2026-08-22');
+  });
+
+  it('should continue without overview when it fails', async () => {
+    let captured = null;
+    mockChatCompletion.mockImplementation((params) => {
+      if (!captured) captured = params.messages.map(m => ({ role: m.role, content: m.content }));
+      return Promise.resolve({ message: { content: 'Done.', tool_calls: [] }, finishReason: 'stop', usage: {}, duration: 10 });
+    });
+
+    const result = await runInvestigation('What changed?');
+
+    expect(result.status).toBe('completed');
+    expect(captured.some(m => String(m.content).includes('Database Overview'))).toBe(false);
   });
 
   it('should stop at MAX_SQL_QUERIES', async () => {
@@ -626,7 +664,7 @@ describe('Agent Runtime', () => {
           content: null,
           tool_calls: [
             toolCall('c2', 'execute_sql', { sql: 'SELECT * FROM orders' }),
-            toolCall('c3', 'get_stats', { stat: 'daily_orders' }),
+            toolCall('c3', 'get_overview', { }),
           ],
         },
         finishReason: 'tool_calls',
@@ -646,7 +684,7 @@ describe('Agent Runtime', () => {
     expect(result.steps).toBe(3);
     expect(result.toolCalls[0].toolName).toBe('get_schema');
     expect(result.toolCalls[1].toolName).toBe('execute_sql');
-    expect(result.toolCalls[2].toolName).toBe('get_stats');
+    expect(result.toolCalls[2].toolName).toBe('get_overview');
   });
 
   it('should return errors array (empty on success)', async () => {

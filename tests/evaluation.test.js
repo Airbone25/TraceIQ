@@ -70,11 +70,11 @@ describe('Evaluation Assertions', () => {
       const realAgentResult = {
         toolCalls: [
           { step: 1, toolName: 'get_schema', input: {}, outputSummary: '{}', duration: 100 },
-          { step: 2, toolName: 'get_stats', input: {}, outputSummary: '{}', duration: 50 },
+          { step: 2, toolName: 'get_overview', input: {}, outputSummary: '{}', duration: 50 },
           { step: 3, toolName: 'execute_sql', input: {}, outputSummary: '{}', duration: 200 },
         ],
       };
-      const result = assertToolUsed(realAgentResult, 'get_stats', 'test');
+      const result = assertToolUsed(realAgentResult, 'get_overview', 'test');
       expect(result.passed).toBe(true);
     });
   });
@@ -143,7 +143,7 @@ describe('Evaluation Runner (with mocked agent)', () => {
       sqlQueries: 2,
       toolCalls: [
         { toolName: 'get_schema' },
-        { toolName: 'get_stats' },
+        { toolName: 'get_overview' },
         { toolName: 'execute_sql' },
       ],
       totalDuration: 15000,
@@ -179,7 +179,7 @@ describe('Evaluation Runner (with mocked agent)', () => {
       answer: 'Orders dropped because of reasons',
       steps: 3,
       sqlQueries: 1,
-      toolCalls: [{ toolName: 'get_schema' }, { toolName: 'get_stats' }],
+      toolCalls: [{ toolName: 'get_schema' }, { toolName: 'get_overview' }],
       totalDuration: 10000,
     });
 

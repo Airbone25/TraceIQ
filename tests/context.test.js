@@ -14,7 +14,7 @@ function makeHistory(toolResultCount, resultChars = 500) {
         id: `call_${i}`,
         type: 'function',
         function: {
-          name: 'get_stats',
+          name: 'get_overview',
           arguments: JSON.stringify({ stat: 'daily_orders', days: i + 1 }),
         },
       }],
@@ -39,7 +39,7 @@ describe('Context Compression', () => {
     });
 
     it('should include tool call arguments in size', () => {
-      const withCalls = [{ role: 'assistant', content: null, tool_calls: [{ id: '1', function: { name: 'get_stats', arguments: '{"stat":"daily_orders"}' } }] }];
+      const withCalls = [{ role: 'assistant', content: null, tool_calls: [{ id: '1', function: { name: 'get_overview', arguments: '{}' } }] }];
       const withoutCalls = [{ role: 'assistant', content: null }];
       expect(estimateSize(withCalls)).toBeGreaterThan(estimateSize(withoutCalls));
     });
@@ -73,7 +73,7 @@ describe('Context Compression', () => {
       const toolMessages = result.filter(m => m.role === 'tool');
       const oldest = JSON.parse(toolMessages[0].content);
       expect(oldest.compressed).toBe(true);
-      expect(oldest.tool).toBe('get_stats');
+      expect(oldest.tool).toBe('get_overview');
       expect(oldest.input).toEqual({ stat: 'daily_orders', days: 1 });
       expect(typeof oldest.note).toBe('string');
     });
@@ -119,7 +119,7 @@ describe('Context Compression', () => {
           content: null,
           tool_calls: [
             { id: 'a', type: 'function', function: { name: 'get_schema', arguments: '{}' } },
-            { id: 'b', type: 'function', function: { name: 'get_stats', arguments: '{"stat":"row_counts"}' } },
+            { id: 'b', type: 'function', function: { name: 'get_overview', arguments: '{}' } },
           ],
         },
         { role: 'tool', tool_call_id: 'a', content: JSON.stringify({ tables: ['orders'], data: 'X'.repeat(300) }) },
@@ -162,7 +162,7 @@ describe('Context Compression', () => {
         {
           role: 'assistant',
           content: null,
-          tool_calls: [{ id: 'y', type: 'function', function: { name: 'get_stats', arguments: '{}' } }],
+          tool_calls: [{ id: 'y', type: 'function', function: { name: 'get_overview', arguments: '{}' } }],
         },
         { role: 'tool', tool_call_id: 'y', content: '{"ok":true}' },
       ];
@@ -181,7 +181,7 @@ describe('Context Compression', () => {
         {
           role: 'assistant',
           content: null,
-          tool_calls: [{ id: 'real', type: 'function', function: { name: 'get_stats', arguments: '{}' } }],
+          tool_calls: [{ id: 'real', type: 'function', function: { name: 'get_overview', arguments: '{}' } }],
         },
         { role: 'tool', tool_call_id: 'real', content: '{"ok":true}' },
       ];

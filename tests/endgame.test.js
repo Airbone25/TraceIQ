@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { mockChatCompletion, mockRegistryExecute, mockCreateInvestigation, mockAddStep, mockFinalizeInvestigation } = vi.hoisted(() => ({
+const { mockChatCompletion, mockRegistryExecute, mockOverviewExecute, mockCreateInvestigation, mockAddStep, mockFinalizeInvestigation } = vi.hoisted(() => ({
   mockChatCompletion: vi.fn(),
   mockRegistryExecute: vi.fn(),
   mockCreateInvestigation: vi.fn().mockResolvedValue({ id: 'test-inv-id', startedAt: new Date() }),
   mockAddStep: vi.fn().mockResolvedValue(undefined),
   mockFinalizeInvestigation: vi.fn().mockResolvedValue(undefined),
+    mockOverviewExecute: vi.fn(),
 }));
 
 vi.mock('../llm/groq.js', () => ({
@@ -40,8 +41,8 @@ vi.mock('../tools/schema.tool.js', () => ({
 vi.mock('../tools/sql.tool.js', () => ({
   sqlTool: { name: 'execute_sql', description: 'mock', parameters: {}, execute: vi.fn() },
 }));
-vi.mock('../tools/stats.tool.js', () => ({
-  statsTool: { name: 'get_stats', description: 'mock', parameters: {}, execute: vi.fn() },
+vi.mock('../tools/overview.tool.js', () => ({
+  overviewTool: { name: 'get_overview', description: 'mock', parameters: {}, schema: {}, execute: mockOverviewExecute },
 }));
 
 vi.mock('../config/env.js', () => ({
@@ -169,6 +170,8 @@ describe('Endgame Agent Behavior', () => {
     mockChatCompletion.mockReset();
     mockRegistryExecute.mockReset();
     mockRegistryExecute.mockResolvedValue({ success: true, data: [{ value: 1 }] });
+    mockOverviewExecute.mockReset();
+    mockOverviewExecute.mockRejectedValue(new Error('no overview in test'));
   });
 
   it('should inject exactly one endgame nudge when time budget runs low', async () => {
@@ -183,7 +186,7 @@ describe('Endgame Agent Behavior', () => {
       captured.push(params.messages.map(m => ({ ...m })));
       mockTime += 4000;
       return Promise.resolve(toolCallsResponse([
-        toolCall(`c${callCount}`, 'get_stats', { stat: 'daily_orders', days: callCount }),
+        toolCall(`c${callCount}`, 'get_overview', { stat: 'daily_orders', days: callCount }),
       ]));
     });
 
@@ -210,7 +213,7 @@ describe('Endgame Agent Behavior', () => {
       captured.push(params);
       if (callCount <= 20) {
         return Promise.resolve(toolCallsResponse([
-          toolCall(`c${callCount}`, 'get_stats', { stat: 'daily_orders', days: callCount }),
+          toolCall(`c${callCount}`, 'get_overview', { stat: 'daily_orders', days: callCount }),
         ]));
       }
       return Promise.resolve(stopResponse('Synthesized conclusion.'));
@@ -235,7 +238,7 @@ describe('Endgame Agent Behavior', () => {
       callCount++;
       if (callCount <= 20) {
         return Promise.resolve(toolCallsResponse([
-          toolCall(`c${callCount}`, 'get_stats', { stat: 'daily_orders', days: callCount }),
+          toolCall(`c${callCount}`, 'get_overview', { stat: 'daily_orders', days: callCount }),
         ]));
       }
       return Promise.reject(new Error('synthesis service down'));
@@ -249,7 +252,7 @@ describe('Endgame Agent Behavior', () => {
 
   it('should not synthesize when the agent concludes naturally', async () => {
     mockChatCompletion
-      .mockResolvedValueOnce(toolCallsResponse([toolCall('c1', 'get_stats', { stat: 'row_counts' })]))
+      .mockResolvedValueOnce(toolCallsResponse([toolCall('c1', 'get_overview', { stat: 'row_counts' })]))
       .mockResolvedValueOnce(stopResponse('All done naturally.'));
 
     const result = await runInvestigation('Quick question');
@@ -259,10 +262,10 @@ describe('Endgame Agent Behavior', () => {
     expect(mockChatCompletion).toHaveBeenCalledTimes(2);
   });
 
-  it('should serve repeated identical get_stats calls from cache', async () => {
+  it('should serve repeated identical get_overview calls from cache', async () => {
     mockChatCompletion
-      .mockResolvedValueOnce(toolCallsResponse([toolCall('c1', 'get_stats', { stat: 'daily_orders', days: 7 })]))
-      .mockResolvedValueOnce(toolCallsResponse([toolCall('c2', 'get_stats', { stat: 'daily_orders', days: 7 })]))
+      .mockResolvedValueOnce(toolCallsResponse([toolCall('c1', 'get_overview', { stat: 'daily_orders', days: 7 })]))
+      .mockResolvedValueOnce(toolCallsResponse([toolCall('c2', 'get_overview', { stat: 'daily_orders', days: 7 })]))
       .mockResolvedValueOnce(stopResponse('done.'));
 
     const result = await runInvestigation('Cache check');
@@ -274,8 +277,8 @@ describe('Endgame Agent Behavior', () => {
 
   it('should execute get_stats again for different inputs', async () => {
     mockChatCompletion
-      .mockResolvedValueOnce(toolCallsResponse([toolCall('c1', 'get_stats', { stat: 'daily_orders', days: 7 })]))
-      .mockResolvedValueOnce(toolCallsResponse([toolCall('c2', 'get_stats', { stat: 'daily_orders', days: 10 })]))
+      .mockResolvedValueOnce(toolCallsResponse([toolCall('c1', 'get_overview', { stat: 'daily_orders', days: 7 })]))
+      .mockResolvedValueOnce(toolCallsResponse([toolCall('c2', 'get_overview', { stat: 'daily_orders', days: 10 })]))
       .mockResolvedValueOnce(stopResponse('done.'));
 
     await runInvestigation('Distinct inputs');
@@ -303,8 +306,8 @@ describe('Endgame Agent Behavior', () => {
       .mockResolvedValueOnce({ success: true, data: [{ ok: true }] });
 
     mockChatCompletion
-      .mockResolvedValueOnce(toolCallsResponse([toolCall('c1', 'get_stats', { stat: 'payment_failures', days: 3 })]))
-      .mockResolvedValueOnce(toolCallsResponse([toolCall('c2', 'get_stats', { stat: 'payment_failures', days: 3 })]))
+      .mockResolvedValueOnce(toolCallsResponse([toolCall('c1', 'get_overview', { stat: 'payment_failures', days: 3 })]))
+      .mockResolvedValueOnce(toolCallsResponse([toolCall('c2', 'get_overview', { stat: 'payment_failures', days: 3 })]))
       .mockResolvedValueOnce(stopResponse('done.'));
 
     const result = await runInvestigation('Failed results not cached');

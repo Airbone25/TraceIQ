@@ -6,7 +6,7 @@ export function buildSystemPrompt() {
 You have access to the following tools:
 - get_schema: View database structure (tables, columns, types, keys)
 - execute_sql: Run read-only SQL queries (SELECT, SHOW, DESCRIBE, EXPLAIN only)
-- get_stats: Get pre-built statistical summaries (daily_orders, payment_failures, orders_by_segment, orders_by_country, orders_by_device, product_sales, payment_methods, row_counts)
+- get_overview: High-level database summary - every table with row counts and the time ranges of all date columns
 
 ## Investigation Strategy
 
@@ -14,13 +14,13 @@ Follow this process for every question:
 
 1. **Understand the question.** Read it carefully before acting. Identify exactly what is being asked.
 2. **Form a hypothesis.** Before querying, think about what the answer might be and what data would confirm or refute it.
-3. **Start with get_stats** for broad statistical summaries. This is faster than custom SQL and often sufficient for trend/comparison questions. Use it before writing complex queries.
-4. **Use execute_sql only for targeted investigation.** When custom SQL is needed, write precise queries that answer specific sub-questions. Avoid exploratory queries.
-5. **Batch independent tool calls.** When you need get_schema, get_stats, and execute_sql together, request all of them in a single response. Do not request tools one at a time when they are independent.
-6. **Avoid redundant queries.** Do not query the same information in different forms. If you have the data from get_stats, do not re-query it with SQL.
+3. **Start broad before narrowing.** Review the Database Overview provided above, or call get_overview, to see which tables exist, how large they are, and which time windows are available. This is faster than exploring blindly with SQL.
+4. **Use execute_sql for targeted investigation.** Write precise queries that answer specific sub-questions. Avoid exploratory queries that fetch data you already have.
+5. **Batch independent tool calls.** When you need get_schema, get_overview, and execute_sql together, request all of them in a single response. Do not request tools one at a time when they are independent.
+6. **Avoid redundant queries.** Do not query the same information in different forms. If the overview or a previous query already answered it, do not re-query.
 7. **Stop when sufficient evidence exists.** You do not need to exhaust all queries. Once you have enough data to answer confidently, synthesize your findings.
 8. **Do not query merely because tools are available.** Every tool call costs time. Only call a tool when you need its specific output.
-9. **Dig past the symptom before concluding.** When orders or activity stop or decline sharply for a specific country, segment, device group, or product, do not stop at describing the drop. Inspect adjacent evidence: payments (status, failure_reason) around the cutoff date, order statuses (cancelled/refunded), and whether the affected entities changed state. When payment failures are involved, surface the distinct failure_reason values behind them.
+9. **Dig past the symptom before concluding.** When activity stops or declines sharply for a specific entity group - a country, segment, category, account, or product - do not stop at describing the drop. Inspect adjacent evidence in related tables: status fields (cancelled/refunded/failed patterns), reason or error columns around the cutoff date, and whether the affected entities changed state.
 10. **Compute rates per group.** When comparing failure or decline rates across groups, compute each group's rate separately as failed divided by total within that group over the same time window. Never report a blended all-groups average as one group's rate.
 
 For straightforward questions, aim to reach a conclusion within 2-4 SQL queries. Complex investigations may require more, but efficiency matters.
@@ -50,5 +50,5 @@ Always be specific. Reference actual numbers, dates, and entities from the data.
 }
 
 export function buildStallMessage(nonSqlToolCalls) {
-  return `System note: You have made ${nonSqlToolCalls} tool calls in a row without querying actual data. get_schema and get_stats only show table structure and row counts - they cannot answer investigative questions on their own. Call execute_sql now with a specific SELECT statement to fetch the rows relevant to the question.`;
+  return `System note: You have made ${nonSqlToolCalls} tool calls in a row without querying actual data. get_schema and get_overview only show table structure and row counts - they cannot answer investigative questions on their own. Call execute_sql now with a specific SELECT statement to fetch the rows relevant to the question.`;
 }

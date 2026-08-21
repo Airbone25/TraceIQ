@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockChatCompletion, mockRegistryExecute, mockCreateInvestigation, mockAddStep, mockFinalizeInvestigation } = vi.hoisted(() => ({
+const { mockChatCompletion, mockRegistryExecute, mockOverviewExecute, mockCreateInvestigation, mockAddStep, mockFinalizeInvestigation } = vi.hoisted(() => ({
   mockChatCompletion: vi.fn(),
   mockRegistryExecute: vi.fn(),
   mockCreateInvestigation: vi.fn().mockResolvedValue({ id: 'test-inv-id', startedAt: new Date() }),
   mockAddStep: vi.fn().mockResolvedValue(undefined),
   mockFinalizeInvestigation: vi.fn().mockResolvedValue(undefined),
+    mockOverviewExecute: vi.fn(),
 }));
 
 vi.mock('../llm/groq.js', () => ({
@@ -41,8 +42,8 @@ vi.mock('../tools/sql.tool.js', () => ({
   sqlTool: { name: 'execute_sql', description: 'mock', parameters: {}, execute: vi.fn() },
 }));
 
-vi.mock('../tools/stats.tool.js', () => ({
-  statsTool: { name: 'get_stats', description: 'mock', parameters: {}, execute: vi.fn() },
+vi.mock('../tools/overview.tool.js', () => ({
+  overviewTool: { name: 'get_overview', description: 'mock', parameters: {}, schema: {}, execute: mockOverviewExecute },
 }));
 
 vi.mock('../config/env.js', () => ({
@@ -76,6 +77,8 @@ describe('Performance Tests', () => {
     mockChatCompletion.mockReset();
     mockRegistryExecute.mockReset();
     mockRegistryExecute.mockResolvedValue({ success: true, data: 'mock_result' });
+    mockOverviewExecute.mockReset();
+    mockOverviewExecute.mockRejectedValue(new Error('no overview in test'));
   });
 
   describe('SQL LIMIT rewriting', () => {
@@ -105,7 +108,7 @@ describe('Performance Tests', () => {
       mockChatCompletion.mockResolvedValue({
         message: {
           content: null,
-          tool_calls: [toolCall('c1', 'get_stats', { stat: 'row_counts' })],
+          tool_calls: [toolCall('c1', 'get_overview', { stat: 'row_counts' })],
         },
         finishReason: 'tool_calls',
         usage: {},
@@ -243,7 +246,7 @@ describe('Performance Tests', () => {
             content: null,
             tool_calls: [
               toolCall('c1', 'get_schema', {}),
-              toolCall('c2', 'get_stats', { stat: 'row_counts' }),
+              toolCall('c2', 'get_overview', { stat: 'row_counts' }),
               toolCall('c3', 'execute_sql', { sql: 'SELECT 1' }),
             ],
           },
@@ -264,7 +267,7 @@ describe('Performance Tests', () => {
       expect(result.steps).toBe(3);
       expect(result.toolCalls).toHaveLength(3);
       expect(result.toolCalls[0].toolName).toBe('get_schema');
-      expect(result.toolCalls[1].toolName).toBe('get_stats');
+      expect(result.toolCalls[1].toolName).toBe('get_overview');
       expect(result.toolCalls[2].toolName).toBe('execute_sql');
     });
 
@@ -278,7 +281,7 @@ describe('Performance Tests', () => {
               content: null,
               tool_calls: [
                 toolCall('c1', 'get_schema', {}),
-                toolCall('c2', 'get_stats', { stat: 'row_counts' }),
+                toolCall('c2', 'get_overview', { stat: 'row_counts' }),
               ],
             },
             finishReason: 'tool_calls',

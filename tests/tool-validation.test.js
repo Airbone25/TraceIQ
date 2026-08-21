@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockQuery } = vi.hoisted(() => ({
+const { mockQuery, mockRawQuery } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
+  mockRawQuery: vi.fn(),
 }));
 
 vi.mock('../database/mysql.js', () => ({
   query: mockQuery,
+  rawQuery: mockRawQuery,
 }));
 
 vi.mock('../config/env.js', () => ({
@@ -20,7 +22,7 @@ vi.mock('../config/env.js', () => ({
 
 import { ToolRegistry } from '../tools/registry.js';
 import { sqlTool } from '../tools/sql.tool.js';
-import { statsTool } from '../tools/stats.tool.js';
+import { overviewTool } from '../tools/overview.tool.js';
 
 describe('Tool Input Validation', () => {
   let registry;
@@ -29,7 +31,7 @@ describe('Tool Input Validation', () => {
     vi.clearAllMocks();
     registry = new ToolRegistry();
     registry.register(sqlTool);
-    registry.register(statsTool);
+    registry.register(overviewTool);
   });
 
   describe('execute_sql validation', () => {
@@ -70,22 +72,38 @@ describe('Tool Input Validation', () => {
     });
   });
 
-  describe('get_stats validation', () => {
-    it('should accept valid stat parameter', async () => {
-      const result = await registry.execute('get_stats', { stat: 'row_counts' });
-      expect(result).toBeDefined();
+  describe('get_overview validation', () => {
+    it('should accept empty arguments and return tables with date ranges', async () => {
+      mockRawQuery.mockResolvedValue([{ Tables_in_test: 'orders' }]);
+      mockQuery.mockImplementation((sql) => {
+        const s = String(sql);
+        if (s.includes('INFORMATION_SCHEMA')) {
+          return Promise.resolve([{ tableName: 'orders', columnName: 'created_at' }]);
+        }
+        if (s.includes('MIN(')) {
+          return Promise.resolve([{ min_created_at: '2026-01-01', max_created_at: '2026-08-01' }]);
+        }
+        return Promise.resolve([{ count: 42 }]);
+      });
+
+      const result = await registry.execute('get_overview', {});
+
+      expect(result.success).toBe(true);
+      expect(result.tables).toEqual([{ name: 'orders', rowCount: 42 }]);
+      expect(result.dateRanges).toEqual([
+        { table: 'orders', column: 'created_at', min: '2026-01-01', max: '2026-08-01' },
+      ]);
     });
 
-    it('should reject missing stat parameter', async () => {
-      await expect(registry.execute('get_stats', {})).rejects.toThrow('validation failed');
+    it('should reject unexpected parameters (strict schema)', async () => {
+      await expect(registry.execute('get_overview', { stat: 'row_counts' })).rejects.toThrow('validation failed');
     });
 
-    it('should reject invalid stat value', async () => {
-      await expect(registry.execute('get_stats', { stat: 'nonexistent_stat' })).rejects.toThrow('validation failed');
-    });
-
-    it('should reject non-string stat', async () => {
-      await expect(registry.execute('get_stats', { stat: 123 })).rejects.toThrow('validation failed');
+    it('should return success:false instead of throwing when the database fails', async () => {
+      mockRawQuery.mockRejectedValue(new Error('connection refused'));
+      const result = await registry.execute('get_overview', {});
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('connection refused');
     });
   });
 
