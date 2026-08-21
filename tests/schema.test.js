@@ -15,9 +15,11 @@ describe('Schema', () => {
     expect(tables).toContain('order_items');
     expect(tables).toContain('products');
     expect(tables).toContain('payments');
+    expect(tables).toContain('investigation_threads');
     expect(tables).toContain('investigations');
+    expect(tables).toContain('investigation_messages');
     expect(tables).toContain('investigation_steps');
-    expect(tables.length).toBe(7);
+    expect(tables.length).toBe(9);
   });
 
   it('should have correct columns on customers', async () => {

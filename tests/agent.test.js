@@ -705,4 +705,70 @@ describe('Agent Runtime', () => {
     expect(mockRegistryExecute).toHaveBeenCalledTimes(5);
     expect(result.sqlQueries).toBe(5);
   });
+
+  it('should inject thread context as system message before the user question', async () => {
+    mockCreateInvestigation.mockClear();
+    const capturedCalls = [];
+    mockChatCompletion.mockImplementation((params) => {
+      capturedCalls.push({ messages: [...params.messages] });
+      return Promise.resolve({
+        message: { content: 'Follow-up answer.', tool_calls: null },
+        finishReason: 'stop',
+        usage: {},
+        duration: 100,
+      });
+    });
+
+    await runInvestigation('Drill deeper', {
+      investigationId: 'pre-existing-id',
+      threadId: 'thread-1',
+      threadContext: [
+        { question: 'Earlier question?', answer: 'Earlier finding with numbers.' },
+      ],
+    });
+
+    expect(mockCreateInvestigation).not.toHaveBeenCalled();
+    const messages = capturedCalls[0].messages;
+    expect(messages[0].role).toBe('system');
+    expect(messages[1].role).toBe('system');
+    expect(messages[1].content).toContain('Prior findings from earlier questions');
+    expect(messages[1].content).toContain('Earlier question?');
+    expect(messages[1].content).toContain('Earlier finding with numbers.');
+    expect(messages[2]).toEqual({ role: 'user', content: 'Drill deeper' });
+  });
+
+  it('should truncate oversized thread context answers', async () => {
+    const capturedCalls = [];
+    mockChatCompletion.mockImplementation((params) => {
+      capturedCalls.push({ messages: [...params.messages] });
+      return Promise.resolve({
+        message: { content: 'Done.', tool_calls: null },
+        finishReason: 'stop',
+        usage: {},
+        duration: 100,
+      });
+    });
+
+    await runInvestigation('Next question', {
+      threadId: 'thread-2',
+      threadContext: [{ question: 'Big question', answer: 'x'.repeat(5000) }],
+    });
+
+    const contextMessage = capturedCalls[0].messages[1].content;
+    expect(contextMessage).toContain('...[truncated]');
+    expect(contextMessage.length).toBeLessThan(3000);
+  });
+
+  it('should pass threadId to createInvestigation when no investigationId is provided', async () => {
+    mockChatCompletion.mockResolvedValue({
+      message: { content: 'Answer.', tool_calls: null },
+      finishReason: 'stop',
+      usage: {},
+      duration: 100,
+    });
+
+    await runInvestigation('Threaded standalone run', { threadId: 'thread-3' });
+
+    expect(mockCreateInvestigation).toHaveBeenCalledWith('Threaded standalone run', 'thread-3');
+  });
 });

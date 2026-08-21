@@ -49,18 +49,43 @@ async function forceFinalSynthesis(messages, state) {
   }
 }
 
-export async function runInvestigation(userQuestion) {
+function buildThreadContextMessage(threadContext) {
+  const maxChars = env.THREAD_CONTEXT_ANSWER_CHARS ?? 2000;
+  const sections = threadContext.map(turn => {
+    const answer = turn.answer.length > maxChars
+      ? turn.answer.substring(0, maxChars) + '...[truncated]'
+      : turn.answer;
+    return `Q: ${turn.question}\nA: ${answer}`;
+  });
+  return [
+    'Prior findings from earlier questions in this investigation thread:',
+    '',
+    sections.join('\n\n'),
+    '',
+    'Use these findings as context. Do not repeat identical queries already answered above unless deeper detail is needed.',
+  ].join('\n');
+}
+
+export async function runInvestigation(userQuestion, options = {}) {
+  const { investigationId: existingId = null, threadId = null, threadContext = [] } = options;
   const state = createAgentState(userQuestion);
-  let investigationId = null;
+  let investigationId = existingId;
 
   try {
-    const { id } = await createInvestigation(userQuestion);
-    investigationId = id;
+    if (!investigationId) {
+      const { id } = await createInvestigation(userQuestion, threadId);
+      investigationId = id;
+    }
 
     let messages = [
       { role: 'system', content: buildSystemPrompt() },
-      { role: 'user', content: userQuestion },
     ];
+
+    if (threadContext.length > 0) {
+      messages.push({ role: 'system', content: buildThreadContextMessage(threadContext) });
+    }
+
+    messages.push({ role: 'user', content: userQuestion });
 
     const toolDefs = registry.getDefinitions();
     const toolCache = new Map();

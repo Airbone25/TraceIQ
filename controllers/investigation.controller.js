@@ -1,12 +1,26 @@
 import pino from 'pino';
 import { testConnection } from '../database/mysql.js';
-import { runInvestigation } from '../agent/agent.js';
-import { getInvestigation, listInvestigations } from '../database/investigation-store.js';
-import { RateLimitError } from '../llm/groq.js';
-import { investigationRateLimiter, QueueTimeoutError } from '../llm/rate-limiter.js';
+import { getInvestigation, listInvestigations, createInvestigation } from '../database/investigation-store.js';
+import { startJob } from '../services/job-runner.js';
 import env from '../config/env.js';
 
 const logger = pino({ name: 'controller' });
+
+export function validateQuestion(req) {
+  const { question } = req.body;
+  if (!question || typeof question !== 'string' || question.trim().length === 0) {
+    return { error: 'question is required and must be a non-empty string' };
+  }
+  const trimmed = question.trim();
+  if (trimmed.length > env.MAX_QUESTION_LENGTH) {
+    return {
+      error: `question exceeds maximum length of ${env.MAX_QUESTION_LENGTH} characters`,
+      maxLength: env.MAX_QUESTION_LENGTH,
+      actualLength: trimmed.length,
+    };
+  }
+  return { value: trimmed };
+}
 
 export async function healthCheck(req, res) {
   const dbOk = await testConnection();
@@ -19,56 +33,21 @@ export async function healthCheck(req, res) {
 }
 
 export async function investigate(req, res) {
-  const { question } = req.body;
-  if (!question || typeof question !== 'string' || question.trim().length === 0) {
-    return res.status(400).json({ error: 'question is required and must be a non-empty string' });
+  const validation = validateQuestion(req);
+  if (validation.error) {
+    return res.status(400).json(validation);
   }
+  const question = validation.value;
 
-  const trimmed = question.trim();
-  if (trimmed.length > env.MAX_QUESTION_LENGTH) {
-    return res.status(400).json({
-      error: `question exceeds maximum length of ${env.MAX_QUESTION_LENGTH} characters`,
-      maxLength: env.MAX_QUESTION_LENGTH,
-      actualLength: trimmed.length,
-    });
-  }
-
-  logger.info({ question: trimmed }, 'Investigation requested');
+  logger.info({ question }, 'Investigation requested');
 
   try {
-    await investigationRateLimiter.acquire();
+    const { id } = await createInvestigation(question);
+    res.status(202).json({ investigationId: id, status: 'queued' });
+    startJob({ investigationId: id, question });
   } catch (err) {
-    if (err instanceof QueueTimeoutError) {
-      const retryAfterSec = Math.ceil(env.INVESTIGATION_QUEUE_TIMEOUT_MS / 1000);
-      logger.warn({ waitedMs: err.waitedMs }, 'Investigation queue timeout');
-      return res.status(429).json({
-        error: 'Another investigation is already in progress',
-        retryAfterSeconds: retryAfterSec,
-        detail: err.message,
-        suggestion: 'Wait for the current investigation to finish, then try again.',
-      });
-    }
-    throw err;
-  }
-
-  try {
-    const result = await runInvestigation(trimmed);
-    res.json(result);
-  } catch (err) {
-    if (err instanceof RateLimitError) {
-      const retryAfterSec = Math.ceil(err.retryAfterMs / 1000);
-      logger.warn({ retryAfterSec }, 'Rate limit exceeded');
-      return res.status(429).json({
-        error: 'LLM rate limit exceeded',
-        retryAfterSeconds: retryAfterSec,
-        detail: err.message,
-        suggestion: 'Upgrade your Groq tier at https://console.groq.com/settings/billing or try again later.',
-      });
-    }
-    logger.error({ err: err.message }, 'Investigation failed');
-    res.status(500).json({ error: 'Investigation failed', detail: err.message });
-  } finally {
-    investigationRateLimiter.release();
+    logger.error({ err: err.message }, 'Failed to queue investigation');
+    res.status(500).json({ error: 'Failed to queue investigation', detail: err.message });
   }
 }
 

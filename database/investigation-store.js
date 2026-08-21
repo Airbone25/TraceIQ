@@ -8,14 +8,14 @@ export function generateId() {
   return crypto.randomUUID();
 }
 
-export async function createInvestigation(question) {
+export async function createInvestigation(question, threadId = null) {
   const id = generateId();
   const startedAt = new Date();
   await query(
-    'INSERT INTO investigations (id, question, status, started_at) VALUES (?, ?, ?, ?)',
-    [id, question, 'running', startedAt]
+    'INSERT INTO investigations (id, thread_id, question, status, started_at) VALUES (?, ?, ?, ?, ?)',
+    [id, threadId, question, 'running', startedAt]
   );
-  logger.info({ id, question }, 'Investigation created');
+  logger.info({ id, threadId, question }, 'Investigation created');
   return { id, startedAt };
 }
 
@@ -47,4 +47,15 @@ export async function getInvestigation(id) {
 
 export async function listInvestigations() {
   return query('SELECT * FROM investigations ORDER BY created_at DESC');
+}
+
+export async function failOrphanedInvestigations() {
+  const result = await query(
+    "UPDATE investigations SET status = 'failed', error = 'Server restarted while investigation was running', completed_at = NOW() WHERE status = 'running'"
+  );
+  const affected = result?.affectedRows ?? 0;
+  if (affected > 0) {
+    logger.warn({ count: affected }, 'Marked orphaned running investigations as failed');
+  }
+  return affected;
 }

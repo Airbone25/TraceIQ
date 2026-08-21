@@ -17,6 +17,23 @@ const config = {
 
 const dbName = process.env.MYSQL_DATABASE || 'traceiq';
 
+async function columnExists(conn, table, column) {
+  const [rows] = await conn.query(
+    'SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+    [dbName, table, column]
+  );
+  return rows[0].cnt > 0;
+}
+
+async function migrate(conn) {
+  if (!(await columnExists(conn, 'investigations', 'thread_id'))) {
+    await conn.execute(
+      'ALTER TABLE investigations ADD COLUMN thread_id VARCHAR(36) NULL AFTER id, ADD INDEX idx_investigations_thread (thread_id)'
+    );
+    logger.info('Migration applied: investigations.thread_id');
+  }
+}
+
 async function setup() {
   let conn;
   try {
@@ -36,6 +53,8 @@ async function setup() {
       }
     }
     logger.info('Schema applied successfully');
+
+    await migrate(conn);
     logger.info('Setup complete');
   } catch (err) {
     logger.error({ err: err.message }, 'Setup failed');

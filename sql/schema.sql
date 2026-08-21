@@ -75,8 +75,18 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 
 -- Investigation persistence tables
+CREATE TABLE IF NOT EXISTS investigation_threads (
+  id VARCHAR(36) PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  INDEX idx_investigation_threads_updated (updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS investigations (
   id VARCHAR(36) PRIMARY KEY,
+  thread_id VARCHAR(36) NULL,
   question TEXT NOT NULL,
   status ENUM('running', 'completed', 'failed') NOT NULL DEFAULT 'running',
   started_at TIMESTAMP NOT NULL,
@@ -89,7 +99,18 @@ CREATE TABLE IF NOT EXISTS investigations (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
   INDEX idx_investigations_status (status),
-  INDEX idx_investigations_created_at (created_at)
+  INDEX idx_investigations_created_at (created_at),
+  INDEX idx_investigations_thread (thread_id)
+);
+
+CREATE TABLE IF NOT EXISTS investigation_messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  thread_id VARCHAR(36) NOT NULL,
+  role ENUM('user', 'assistant') NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  INDEX idx_investigation_messages_thread (thread_id, created_at)
 );
 
 CREATE TABLE IF NOT EXISTS investigation_steps (

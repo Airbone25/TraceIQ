@@ -61,12 +61,14 @@ describe('Health Endpoint', () => {
     expect(res.body.actualLength).toBe(5001);
   });
 
-  it('should accept question at MAX_QUESTION_LENGTH', async () => {
+  it('should accept question at MAX_QUESTION_LENGTH and return 202 queued', async () => {
     const maxQuestion = 'a'.repeat(5000);
     const res = await request(app)
       .post('/api/investigate')
       .send({ question: maxQuestion });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    expect(res.body.investigationId).toBeTruthy();
+    expect(res.body.status).toBe('queued');
   });
 
   it('should list investigations', async () => {

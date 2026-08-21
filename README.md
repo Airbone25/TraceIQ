@@ -8,7 +8,7 @@ An autonomous agent that investigates business questions by exploring a MySQL da
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-272%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-309%20passing-brightgreen)](#testing)
 
 </div>
 
@@ -93,6 +93,9 @@ The core design enforces a strict separation of concerns: the LLM never directly
 - **Context protection** — configurable `max_tokens`, tool result truncation, conversation history compression, and retryable handling of provider TPM limits (e.g., Groq free tier)
 - **Convergence safeguards** — endgame nudge as budgets run low, forced final synthesis when limits hit, and per-investigation tool result caching to avoid repeat queries
 - **Concurrency guard** — in-process rate limiter queues or rejects overlapping investigations so parallel requests cannot exhaust provider token budgets
+- **Async job execution** — `POST /api/investigate` returns `202` immediately and runs in the background; orphaned runs are reconciled as failed on server restart
+- **Investigation threads with follow-ups** — ask follow-up questions that continue from prior findings in a ChatGPT-style conversation, with prior answers injected as bounded context
+- **Web dashboard** — built-in chat UI served at `/`: sidebar of investigation threads, live step progress while investigating, rendered evidence-backed answers
 
 ## Tech Stack
 
@@ -138,16 +141,20 @@ npm test
 npm start
 ```
 
-The server starts on `http://localhost:3001`.
+The server starts on `http://localhost:3001`. Open it in a browser for the built-in investigation dashboard.
 
 ### API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/health` | Database connectivity check |
-| `POST` | `/api/investigate` | Submit an investigation question |
+| `POST` | `/api/investigate` | Submit an investigation question → `202 {investigationId}` (runs in background) |
 | `GET` | `/api/investigations` | List all past investigations |
-| `GET` | `/api/investigate/:id` | Retrieve a persisted investigation |
+| `GET` | `/api/investigate/:id` | Retrieve a persisted investigation with its step timeline |
+| `POST` | `/api/threads` | Start an investigation thread → `202 {threadId, investigationId}` |
+| `GET` | `/api/threads` | List threads with latest status and message counts |
+| `GET` | `/api/threads/:id` | Thread detail: messages, runs, and latest run steps |
+| `POST` | `/api/threads/:id/messages` | Ask a follow-up that continues from prior findings (`409` while a run is active) |
 
 ### Example Request
 
@@ -162,16 +169,11 @@ curl -X POST http://localhost:3001/api/investigate \
 ```json
 {
   "investigationId": "123e4567-e89b-12d3-a456-426614174000",
-  "question": "Why did our orders drop yesterday compared to the previous 7 days?",
-  "status": "completed",
-  "answer": "**Conclusion:** Orders dropped due to...\n\n**Key Evidence:**\n- ...\n\n**Confidence:** High",
-  "steps": 6,
-  "sqlQueries": 4,
-  "toolCalls": [...],
-  "errors": [],
-  "totalDuration": 12340
+  "status": "queued"
 }
 ```
+
+Poll `GET /api/investigate/123e4567-...` until `status` is `completed`, then read `final_answer`, `steps`, and the full `steps[]` tool timeline.
 
 ### Retrieve Past Investigation
 
@@ -208,7 +210,9 @@ All configuration is via environment variables (loaded from `.env`):
 | `MAX_TOOL_RESULT_CHARS` | `4000` | Max characters of a tool result kept in LLM message history |
 | `MAX_CONTEXT_CHARS` | `12000` | Conversation history budget; older tool results are compressed to stubs beyond this |
 | `MAX_CONCURRENT_INVESTIGATIONS` | `1` | Max investigations running at once (protects provider TPM limits) |
-| `INVESTIGATION_QUEUE_TIMEOUT_MS` | `10000` | How long a queued investigation waits before returning 429 |
+| `INVESTIGATION_QUEUE_TIMEOUT_MS` | `10000` | How long a queued investigation waits before failing with a queue-timeout error |
+| `THREAD_CONTEXT_TURNS` | `3` | Max prior Q&A turns injected as context for follow-up questions |
+| `THREAD_CONTEXT_ANSWER_CHARS` | `2000` | Per-answer character cap when injecting thread context |
 
 ## Database Schema
 
@@ -253,11 +257,23 @@ payments
 ### Audit Tables
 
 ```
+investigation_threads
+├── id (PK, UUID)
+├── title
+└── created_at, updated_at
+
 investigations
 ├── id (PK, UUID)
+├── thread_id (nullable FK -> investigation_threads)
 ├── question, status (running/completed/failed)
 ├── started_at, completed_at, duration_ms
 ├── steps, sql_queries, final_answer, error
+└── created_at
+
+investigation_messages
+├── id (PK, AUTO_INCREMENT)
+├── thread_id -> investigation_threads
+├── role (user/assistant), content
 └── created_at
 
 investigation_steps
@@ -311,7 +327,10 @@ traceiq/
 ├── database/
 │   ├── mysql.js                # Connection pool, query helpers
 │   ├── queries.js              # Pre-built analytical queries
-│   └── investigation-store.js  # Investigation persistence layer
+│   ├── investigation-store.js  # Investigation persistence layer
+│   └── thread-store.js         # Thread/message persistence for follow-ups
+├── services/
+│   └── job-runner.js           # Background investigation executor
 ├── security/
 │   └── sql-validator.js        # SQL injection/writes blocker
 ├── tools/
@@ -337,7 +356,12 @@ traceiq/
 ├── routes/
 │   └── investigation.routes.js # API route definitions
 ├── controllers/
-│   └── investigation.controller.js # Request handlers
+│   ├── investigation.controller.js # Request handlers (legacy + health)
+│   └── threads.controller.js   # Thread/follow-up request handlers
+├── public/                     # Built-in web dashboard (vanilla SPA)
+│   ├── index.html
+│   ├── css/styles.css
+│   └── js/app.js
 ├── src/
 │   └── server.js               # Express server entry point
 ├── sql/
@@ -389,22 +413,25 @@ npm run eval
 
 | Test Suite | Tests | What It Validates |
 |-----------|-------|-------------------|
-| `agent.test.js` | 24 | Agent loop, tool dispatch, state limits, errors |
+| `agent.test.js` | 27 | Agent loop, tool dispatch, state limits, errors, thread context injection |
 | `config.test.js` | 2 | Configuration determinism in test mode |
 | `context.test.js` | 14 | History compression: stubs, message shape, budgets |
 | `database.test.js` | 2 | MySQL connectivity, correct database |
 | `endgame.test.js` | 17 | Endgame nudges, forced synthesis, tool result caching |
 | `evaluation.test.js` | 23 | Evaluation assertions, scenario runner, definitions |
 | `groq.test.js` | 18 | LLM client, error handling, retries, configurable model |
-| `health.test.js` | 7 | Health endpoint, input validation, question length, list investigations |
-| `investigation-store.test.js` | 12 | CRUD operations, ID generation |
+| `health.test.js` | 7 | Health endpoint, input validation, async 202 queueing |
+| `investigation-store.test.js` | 13 | CRUD operations, ID generation, thread association |
+| `job-runner.test.js` | 8 | Background execution, assistant message persistence, queue timeouts |
 | `performance.test.js` | 18 | SQL dedup, batch handling, limits |
 | `rate-limiter.test.js` | 9 | Concurrency guard: queueing, FIFO, timeouts |
-| `schema.test.js` | 4 | All 7 tables exist, columns, foreign keys |
+| `schema.test.js` | 4 | All tables exist, columns, foreign keys |
 | `seed.test.js` | 8 | Row counts, all anomalies present |
 | `sql-security.test.js` | 47 | SQL injection, blocked operations, LIMIT enforcement |
 | `sql-tool.test.js` | 23 | SQL tool execution, validation, dedup |
 | `sql-validator.test.js` | 14 | Validator rules, edge cases |
+| `thread-store.test.js` | 14 | Thread/message CRUD, active-run checks, context extraction |
+| `threads-api.test.js` | 11 | Thread endpoints: create, follow-ups (409), list, detail |
 | `tool-registry.test.js` | 12 | Registration, dispatch, errors |
 | `tool-validation.test.js` | 12 | Zod schema validation for all tools |
 

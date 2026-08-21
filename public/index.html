@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TraceIQ — AI Database Investigator</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">TraceIQ</div>
+        <span id="health-dot" class="health-dot" title="API status"></span>
+      </div>
+      <button id="new-thread-btn" class="new-thread-btn">+ New Investigation</button>
+      <ul id="thread-list" class="thread-list"></ul>
+    </aside>
+
+    <main class="chat-pane">
+      <div id="messages" class="messages">
+        <div class="empty-state">
+          <h2>Investigate your database</h2>
+          <p>Ask why a metric changed, which segment is affected, or what is driving a trend.<br>TraceIQ explores the data and reports findings with evidence.</p>
+          <div class="example-questions">
+            <button class="example-btn">Why did orders from Russia stop recently?</button>
+            <button class="example-btn">Why are payment failures spiking? Are certain user groups affected more?</button>
+            <button class="example-btn">Which products saw an unusual surge in sales?</button>
+          </div>
+        </div>
+      </div>
+
+      <form id="ask-form" class="composer">
+        <textarea id="question-input" placeholder="Ask a question about your database..." rows="1" disabled></textarea>
+        <button type="submit" id="send-btn" disabled aria-label="Send">&#10148;</button>
+      </form>
+    </main>
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

@@ -38,7 +38,16 @@ describe('Investigation Store', () => {
       expect(startedAt).toBeInstanceOf(Date);
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO investigations'),
-        [id, 'test question', 'running', startedAt]
+        [id, null, 'test question', 'running', startedAt]
+      );
+    });
+
+    it('should persist a threadId when provided', async () => {
+      mockQuery.mockResolvedValueOnce([]);
+      const { id } = await createInvestigation('threaded question', 'thread-9');
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO investigations'),
+        [id, 'thread-9', 'threaded question', 'running', expect.any(Date)]
       );
     });
 
