@@ -8,7 +8,7 @@ An autonomous agent that investigates business questions by exploring a MySQL da
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-230%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-254%20passing-brightgreen)](#testing)
 
 </div>
 
@@ -90,7 +90,8 @@ The core design enforces a strict separation of concerns: the LLM never directly
 - **Evaluation framework** — deterministic scenarios for measuring agent performance against known anomalies
 - **Structured logging** — Pino-based JSON logging across all layers
 - **LLM retry with backoff** — automatic retry on transient API errors (429, 413 token-limit, 500, 502, 503) with exponential backoff
-- **Context protection** — configurable `max_tokens`, tool result truncation, and retryable handling of provider TPM limits (e.g., Groq free tier)
+- **Context protection** — configurable `max_tokens`, tool result truncation, conversation history compression, and retryable handling of provider TPM limits (e.g., Groq free tier)
+- **Concurrency guard** — in-process rate limiter queues or rejects overlapping investigations so parallel requests cannot exhaust provider token budgets
 
 ## Tech Stack
 
@@ -204,6 +205,9 @@ All configuration is via environment variables (loaded from `.env`):
 | `MAX_QUESTION_LENGTH` | `5000` | Max characters in input question |
 | `LLM_MAX_TOKENS` | `1024` | Max completion tokens per LLM call (counts toward provider TPM limits) |
 | `MAX_TOOL_RESULT_CHARS` | `4000` | Max characters of a tool result kept in LLM message history |
+| `MAX_CONTEXT_CHARS` | `12000` | Conversation history budget; older tool results are compressed to stubs beyond this |
+| `MAX_CONCURRENT_INVESTIGATIONS` | `1` | Max investigations running at once (protects provider TPM limits) |
+| `INVESTIGATION_QUEUE_TIMEOUT_MS` | `10000` | How long a queued investigation waits before returning 429 |
 
 ## Database Schema
 
@@ -308,10 +312,12 @@ traceiq/
 │   └── stats.tool.js           # get_stats tool
 ├── agent/
 │   ├── agent.js                # Agentic loop orchestrator
+│   ├── context.js              # Conversation history compression
 │   ├── prompts.js              # System prompt builder
 │   └── state.js                # Bounded investigation state
 ├── llm/
-│   └── groq.js                 # Groq API client
+│   ├── groq.js                 # Groq API client
+│   └── rate-limiter.js         # Concurrency guard with queueing
 ├── evaluation/
 │   ├── assertions.js           # Assertion helpers for eval
 │   ├── runner.js               # Scenario runner
@@ -376,12 +382,14 @@ npm run eval
 |-----------|-------|-------------------|
 | `agent.test.js` | 24 | Agent loop, tool dispatch, state limits, errors |
 | `config.test.js` | 2 | Configuration determinism in test mode |
+| `context.test.js` | 14 | History compression: stubs, message shape, budgets |
 | `database.test.js` | 2 | MySQL connectivity, correct database |
 | `evaluation.test.js` | 23 | Evaluation assertions, scenario runner, definitions |
 | `groq.test.js` | 18 | LLM client, error handling, retries, configurable model |
 | `health.test.js` | 7 | Health endpoint, input validation, question length, list investigations |
 | `investigation-store.test.js` | 12 | CRUD operations, ID generation |
 | `performance.test.js` | 18 | SQL dedup, batch handling, limits |
+| `rate-limiter.test.js` | 9 | Concurrency guard: queueing, FIFO, timeouts |
 | `schema.test.js` | 4 | All 7 tables exist, columns, foreign keys |
 | `seed.test.js` | 8 | Row counts, all anomalies present |
 | `sql-security.test.js` | 47 | SQL injection, blocked operations, LIMIT enforcement |

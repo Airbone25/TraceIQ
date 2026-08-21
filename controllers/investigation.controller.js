@@ -3,6 +3,7 @@ import { testConnection } from '../database/mysql.js';
 import { runInvestigation } from '../agent/agent.js';
 import { getInvestigation, listInvestigations } from '../database/investigation-store.js';
 import { RateLimitError } from '../llm/groq.js';
+import { investigationRateLimiter, QueueTimeoutError } from '../llm/rate-limiter.js';
 import env from '../config/env.js';
 
 const logger = pino({ name: 'controller' });
@@ -35,6 +36,22 @@ export async function investigate(req, res) {
   logger.info({ question: trimmed }, 'Investigation requested');
 
   try {
+    await investigationRateLimiter.acquire();
+  } catch (err) {
+    if (err instanceof QueueTimeoutError) {
+      const retryAfterSec = Math.ceil(env.INVESTIGATION_QUEUE_TIMEOUT_MS / 1000);
+      logger.warn({ waitedMs: err.waitedMs }, 'Investigation queue timeout');
+      return res.status(429).json({
+        error: 'Another investigation is already in progress',
+        retryAfterSeconds: retryAfterSec,
+        detail: err.message,
+        suggestion: 'Wait for the current investigation to finish, then try again.',
+      });
+    }
+    throw err;
+  }
+
+  try {
     const result = await runInvestigation(trimmed);
     res.json(result);
   } catch (err) {
@@ -50,6 +67,8 @@ export async function investigate(req, res) {
     }
     logger.error({ err: err.message }, 'Investigation failed');
     res.status(500).json({ error: 'Investigation failed', detail: err.message });
+  } finally {
+    investigationRateLimiter.release();
   }
 }
 

@@ -7,6 +7,7 @@ import { schemaTool } from '../tools/schema.tool.js';
 import { sqlTool } from '../tools/sql.tool.js';
 import { statsTool } from '../tools/stats.tool.js';
 import { chatCompletion, RateLimitError } from '../llm/groq.js';
+import { compressHistory } from './context.js';
 import { createInvestigation, addStep, finalizeInvestigation } from '../database/investigation-store.js';
 
 const logger = pino({ name: 'agent' });
@@ -37,7 +38,7 @@ export async function runInvestigation(userQuestion) {
     const { id } = await createInvestigation(userQuestion);
     investigationId = id;
 
-    const messages = [
+    let messages = [
       { role: 'system', content: buildSystemPrompt() },
       { role: 'user', content: userQuestion },
     ];
@@ -48,6 +49,7 @@ export async function runInvestigation(userQuestion) {
     while (canTakeStep(state) && !hasTimedOut(state)) {
       state.overheadDuration += Date.now() - lastToolBatchEnd;
 
+      messages = compressHistory(messages);
       const response = await chatCompletion({ messages, tools: toolDefs });
       recordLlmCall(state, response);
 

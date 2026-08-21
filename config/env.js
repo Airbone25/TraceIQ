@@ -23,6 +23,9 @@ const envSchema = z.object({
   MAX_QUESTION_LENGTH: z.coerce.number().int().positive().default(5000),
   LLM_MAX_TOKENS: z.coerce.number().int().positive().default(1024),
   MAX_TOOL_RESULT_CHARS: z.coerce.number().int().positive().default(4000),
+  MAX_CONTEXT_CHARS: z.coerce.number().int().positive().default(12000),
+  MAX_CONCURRENT_INVESTIGATIONS: z.coerce.number().int().positive().default(1),
+  INVESTIGATION_QUEUE_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
 });
 
 const parsed = envSchema.safeParse(process.env);
