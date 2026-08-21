@@ -1,6 +1,6 @@
 import pino from 'pino';
 import env from '../config/env.js';
-import { buildSystemPrompt } from './prompts.js';
+import { buildSystemPrompt, buildStallMessage } from './prompts.js';
 import { createAgentState, canTakeStep, canRunSql, hasTimedOut, isDuplicateSql, recordToolCall, recordLlmCall, markCompleted, markFailed, shouldNudge, buildNudgeMessage } from './state.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { schemaTool } from '../tools/schema.tool.js';
@@ -11,6 +11,8 @@ import { compressHistory } from './context.js';
 import { createInvestigation, addStep, finalizeInvestigation } from '../database/investigation-store.js';
 
 const logger = pino({ name: 'agent' });
+
+const STALL_THRESHOLD = 3;
 
 const registry = new ToolRegistry();
 registry.register(schemaTool);
@@ -90,6 +92,8 @@ export async function runInvestigation(userQuestion, options = {}) {
     const toolDefs = registry.getDefinitions();
     const toolCache = new Map();
     let lastToolBatchEnd = state.startTime;
+    let consecutiveNonSqlTools = 0;
+    let stallNudged = false;
 
     while (canTakeStep(state) && !hasTimedOut(state)) {
       state.overheadDuration += Date.now() - lastToolBatchEnd;
@@ -98,6 +102,12 @@ export async function runInvestigation(userQuestion, options = {}) {
         state.nudged = true;
         messages.push({ role: 'system', content: buildNudgeMessage(state) });
         logger.info({ step: state.steps }, 'Endgame nudge injected');
+      }
+
+      if (!stallNudged && consecutiveNonSqlTools >= STALL_THRESHOLD) {
+        stallNudged = true;
+        messages.push({ role: 'system', content: buildStallMessage(consecutiveNonSqlTools) });
+        logger.info({ step: state.steps, nonSqlToolCalls: consecutiveNonSqlTools }, 'Stall nudge injected');
       }
 
       messages = compressHistory(messages);
@@ -116,6 +126,11 @@ export async function runInvestigation(userQuestion, options = {}) {
         if (!canTakeStep(state) || hasTimedOut(state)) break;
 
         const toolName = toolCall.function.name;
+        if (toolName === 'execute_sql') {
+          consecutiveNonSqlTools = 0;
+        } else {
+          consecutiveNonSqlTools++;
+        }
         let toolInput;
         try {
           toolInput = JSON.parse(toolCall.function.arguments);

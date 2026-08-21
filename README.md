@@ -8,7 +8,7 @@ An autonomous agent that investigates business questions by exploring a MySQL da
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-321%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-324%20passing-brightgreen)](#testing)
 
 </div>
 
@@ -417,7 +417,7 @@ npm run eval
 
 | Test Suite | Tests | What It Validates |
 |-----------|-------|-------------------|
-| `agent.test.js` | 27 | Agent loop, tool dispatch, state limits, errors, thread context injection |
+| `agent.test.js` | 29 | Agent loop, tool dispatch, state limits, errors, thread context injection, stall guard |
 | `config.test.js` | 2 | Configuration determinism in test mode |
 | `context.test.js` | 14 | History compression: stubs, message shape, budgets |
 | `database.test.js` | 2 | MySQL connectivity, correct database |
@@ -428,7 +428,7 @@ npm run eval
 | `investigation-store.test.js` | 13 | CRUD operations, ID generation, thread association |
 | `job-runner.test.js` | 8 | Background execution, assistant message persistence, queue timeouts |
 | `performance.test.js` | 18 | SQL dedup, batch handling, limits |
-| `prompts.test.js` | 3 | System prompt heuristics: symptom digging, per-group rates |
+| `prompts.test.js` | 4 | System prompt heuristics: symptom digging, per-group rates, stall message |
 | `rate-limiter.test.js` | 9 | Concurrency guard: queueing, FIFO, timeouts |
 | `schema.test.js` | 4 | All tables exist, columns, foreign keys |
 | `seed.test.js` | 8 | Row counts, all anomalies present |

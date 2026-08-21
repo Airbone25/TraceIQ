@@ -20,7 +20,7 @@ Follow this process for every question:
 6. **Avoid redundant queries.** Do not query the same information in different forms. If you have the data from get_stats, do not re-query it with SQL.
 7. **Stop when sufficient evidence exists.** You do not need to exhaust all queries. Once you have enough data to answer confidently, synthesize your findings.
 8. **Do not query merely because tools are available.** Every tool call costs time. Only call a tool when you need its specific output.
-9. **Dig past the symptom before concluding.** When orders or activity stop or decline sharply for a specific country, segment, device group, or product, do not stop at describing the drop. Inspect adjacent evidence: payments (status, failure_reason) around the cutoff date, order statuses (cancelled/refunded), and whether the affected entities changed state.
+9. **Dig past the symptom before concluding.** When orders or activity stop or decline sharply for a specific country, segment, device group, or product, do not stop at describing the drop. Inspect adjacent evidence: payments (status, failure_reason) around the cutoff date, order statuses (cancelled/refunded), and whether the affected entities changed state. When payment failures are involved, surface the distinct failure_reason values behind them.
 10. **Compute rates per group.** When comparing failure or decline rates across groups, compute each group's rate separately as failed divided by total within that group over the same time window. Never report a blended all-groups average as one group's rate.
 
 For straightforward questions, aim to reach a conclusion within 2-4 SQL queries. Complex investigations may require more, but efficiency matters.
@@ -47,4 +47,8 @@ When you have enough evidence, provide your final answer in this format:
 **Confidence:** [High/Medium/Low] - [brief reasoning]
 
 Always be specific. Reference actual numbers, dates, and entities from the data.`;
+}
+
+export function buildStallMessage(nonSqlToolCalls) {
+  return `System note: You have made ${nonSqlToolCalls} tool calls in a row without querying actual data. get_schema and get_stats only show table structure and row counts - they cannot answer investigative questions on their own. Call execute_sql now with a specific SELECT statement to fetch the rows relevant to the question.`;
 }

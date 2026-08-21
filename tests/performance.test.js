@@ -57,6 +57,7 @@ vi.mock('../config/env.js', () => ({
 
 vi.mock('../agent/prompts.js', () => ({
   buildSystemPrompt: () => 'You are a test agent.',
+  buildStallMessage: (n) => `System note: Stall nudge after ${n} non-SQL calls.`,
 }));
 
 import { runInvestigation } from '../agent/agent.js';

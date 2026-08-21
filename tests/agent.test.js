@@ -72,6 +72,7 @@ vi.mock('../config/env.js', () => ({
 
 vi.mock('../agent/prompts.js', () => ({
   buildSystemPrompt: () => 'You are a test agent.',
+  buildStallMessage: (n) => `System note: Stall nudge after ${n} non-SQL calls.`,
 }));
 
 import { runInvestigation } from '../agent/agent.js';
@@ -261,6 +262,51 @@ describe('Agent Runtime', () => {
     expect(result.answer).toContain('step/timeout limit');
     expect(result.toolCalls).toHaveLength(8);
     expect(mockChatCompletion).toHaveBeenCalledTimes(9);
+  });
+
+  it('should inject stall nudge after repeated non-SQL tool calls', async () => {
+    const captured = [];
+    const responses = [
+      { message: { content: null, tool_calls: [toolCall('c1', 'get_schema', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
+      { message: { content: null, tool_calls: [toolCall('c2', 'get_stats', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
+      { message: { content: null, tool_calls: [toolCall('c3', 'get_schema', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
+      { message: { content: 'Final answer.', tool_calls: [] }, finishReason: 'stop', usage: {}, duration: 10 },
+    ];
+    let i = 0;
+    mockChatCompletion.mockImplementation((params) => {
+      captured.push(params.messages.map(m => ({ role: m.role, content: m.content })));
+      return Promise.resolve(responses[i++] ?? responses[responses.length - 1]);
+    });
+
+    const result = await runInvestigation('Why did sales drop?');
+
+    expect(result.status).toBe('completed');
+    const callsWithNudge = captured.filter(msgs =>
+      msgs.some(m => m.role === 'system' && String(m.content).includes('Stall nudge')));
+    expect(callsWithNudge).toHaveLength(1);
+    expect(callsWithNudge[0].some(m => String(m.content).includes('3 non-SQL calls'))).toBe(true);
+  });
+
+  it('should not inject stall nudge when execute_sql is used regularly', async () => {
+    const captured = [];
+    const responses = [
+      { message: { content: null, tool_calls: [toolCall('c1', 'get_schema', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
+      { message: { content: null, tool_calls: [toolCall('c2', 'execute_sql', { sql: 'SELECT COUNT(*) AS c FROM orders' })] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
+      { message: { content: null, tool_calls: [toolCall('c3', 'get_stats', {})] }, finishReason: 'tool_calls', usage: {}, duration: 10 },
+      { message: { content: 'Done.', tool_calls: [] }, finishReason: 'stop', usage: {}, duration: 10 },
+    ];
+    let i = 0;
+    mockChatCompletion.mockImplementation((params) => {
+      captured.push(params.messages.map(m => ({ role: m.role, content: m.content })));
+      return Promise.resolve(responses[i++] ?? responses[responses.length - 1]);
+    });
+
+    const result = await runInvestigation('Count the orders');
+
+    expect(result.status).toBe('completed');
+    const callsWithNudge = captured.filter(msgs =>
+      msgs.some(m => m.role === 'system' && String(m.content).includes('Stall nudge')));
+    expect(callsWithNudge).toHaveLength(0);
   });
 
   it('should stop at MAX_SQL_QUERIES', async () => {
