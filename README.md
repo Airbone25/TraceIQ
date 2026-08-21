@@ -95,6 +95,8 @@ The core design enforces a strict separation of concerns: the LLM never directly
 - **Concurrency guard** — in-process rate limiter queues or rejects overlapping investigations so parallel requests cannot exhaust provider token budgets
 - **Async job execution** — `POST /api/investigate` returns `202` immediately and runs in the background; orphaned runs are reconciled as failed on server restart
 - **Investigation threads with follow-ups** — ask follow-up questions that continue from prior findings in a ChatGPT-style conversation, with prior answers injected as bounded context
+- **Bring your own database** — register any MySQL server (host/user/password) in the UI or API; credentials are encrypted at rest (AES-256-GCM), databases are browsable per connection, and each chat can target a different database
+- **Schema-agnostic investigations** — an auto-injected database overview (table sizes + date ranges) grounds the agent on any schema; no domain-specific tooling required
 - **Web dashboard** — built-in chat UI served at `/`: sidebar of investigation threads, live step progress while investigating, rendered evidence-backed answers
 
 ## Tech Stack
@@ -151,10 +153,14 @@ The server starts on `http://localhost:3001`. Open it in a browser for the built
 | `POST` | `/api/investigate` | Submit an investigation question → `202 {investigationId}` (runs in background) |
 | `GET` | `/api/investigations` | List all past investigations |
 | `GET` | `/api/investigate/:id` | Retrieve a persisted investigation with its step timeline |
-| `POST` | `/api/threads` | Start an investigation thread → `202 {threadId, investigationId}` |
+| `POST` | `/api/threads` | Start an investigation thread → `202 {threadId, investigationId}`; optional `connectionId` + `database` target a registered MySQL server |
 | `GET` | `/api/threads` | List threads with latest status and message counts |
 | `GET` | `/api/threads/:id` | Thread detail: messages, runs, and latest run steps |
 | `POST` | `/api/threads/:id/messages` | Ask a follow-up that continues from prior findings (`409` while a run is active) |
+| `POST` | `/api/connections` | Register a MySQL server (`name`, `host`, `port`, `user`, `password`) — verified before storing; password encrypted at rest |
+| `GET` | `/api/connections` | List registered connections (never returns credentials) |
+| `DELETE` | `/api/connections/:id` | Remove a connection and its cached pools |
+| `GET` | `/api/connections/:id/databases` | List user databases on that server (system schemas filtered) |
 
 ### Example Request
 
@@ -213,6 +219,7 @@ All configuration is via environment variables (loaded from `.env`):
 | `INVESTIGATION_QUEUE_TIMEOUT_MS` | `10000` | How long a queued investigation waits before failing with a queue-timeout error |
 | `THREAD_CONTEXT_TURNS` | `3` | Max prior Q&A turns injected as context for follow-up questions |
 | `THREAD_CONTEXT_ANSWER_CHARS` | `2000` | Per-answer character cap when injecting thread context |
+| `APP_SECRET` | *(insecure default)* | 64-char hex key used to encrypt stored connection passwords (AES-256-GCM). **Set this in any non-local deployment** — a warning is logged at startup when unset |
 
 ## Database Schema
 
@@ -260,7 +267,16 @@ payments
 investigation_threads
 ├── id (PK, UUID)
 ├── title
+├── connection_id (nullable FK -> db_connections)
+├── target_database (nullable) — database this chat investigates
 └── created_at, updated_at
+
+db_connections
+├── id (PK, UUID)
+├── name (unique display name)
+├── host, port, db_user
+├── password_enc — AES-256-GCM ciphertext
+└── created_at
 
 investigations
 ├── id (PK, UUID)

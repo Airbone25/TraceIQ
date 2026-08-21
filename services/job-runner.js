@@ -36,7 +36,16 @@ async function executeJob({ investigationId, question, threadId, threadContext }
   }
 
   try {
-    const result = await runInvestigation(question, { investigationId, threadId, threadContext });
+    let connectionId = null;
+    let database = null;
+    if (threadId) {
+      const thread = await getThread(threadId).catch(() => null);
+      if (thread) {
+        connectionId = thread.connection_id || null;
+        database = thread.target_database || null;
+      }
+    }
+    const result = await runInvestigation(question, { investigationId, threadId, threadContext, connectionId, database });
     if (threadId && result.status === 'completed' && result.answer) {
       const thread = await getThread(threadId).catch(() => null);
       if (thread) {

@@ -18,8 +18,9 @@ describe('Schema', () => {
     expect(tables).toContain('investigation_threads');
     expect(tables).toContain('investigations');
     expect(tables).toContain('investigation_messages');
-    expect(tables).toContain('investigation_steps');
-    expect(tables.length).toBe(9);
+expect(tables).toContain('investigation_steps');
+expect(tables).toContain('db_connections');
+expect(tables.length).toBe(10);
   });
 
   it('should have correct columns on customers', async () => {

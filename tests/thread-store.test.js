@@ -40,9 +40,15 @@ describe('Thread Store', () => {
       expect(id).toBeTruthy();
       expect(title).toBe('Why did orders drop?');
       expect(mockQuery).toHaveBeenCalledWith(
-        'INSERT INTO investigation_threads (id, title) VALUES (?, ?)',
-        [id, 'Why did orders drop?']
+        'INSERT INTO investigation_threads (id, title, connection_id, target_database) VALUES (?, ?, ?, ?)',
+        [id, 'Why did orders drop?', null, null]
       );
+    });
+
+    it('should store the database binding when provided', async () => {
+      await createThread('Bound question', { connectionId: 'conn-1', database: 'sales_db' });
+      const [, params] = mockQuery.mock.calls.at(-1);
+      expect(params.slice(2)).toEqual(['conn-1', 'sales_db']);
     });
   });
 

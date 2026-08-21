@@ -9,6 +9,13 @@ const els = {
   input: document.getElementById('question-input'),
   sendBtn: document.getElementById('send-btn'),
   healthDot: document.getElementById('health-dot'),
+  connectionSelect: document.getElementById('connection-select'),
+  databaseSelect: document.getElementById('database-select'),
+  manageConnectionsBtn: document.getElementById('manage-connections-btn'),
+  connectionsModal: document.getElementById('connections-modal'),
+  closeConnectionsModal: document.getElementById('close-connections-modal'),
+  connectionsList: document.getElementById('connections-list'),
+  addConnectionForm: document.getElementById('add-connection-form'),
 };
 
 let state = {
@@ -20,6 +27,7 @@ let state = {
   renderedMessageCount: 0,
   renderedStepCount: 0,
   lastRunStatus: null,
+  target: { connectionId: '', database: '' },
 };
 
 async function api(path, options = {}) {
@@ -285,6 +293,10 @@ function renderThread(detail) {
   const isNewThread = state.renderedThreadId !== state.activeThreadId;
   const reachedTerminal = state.lastRunStatus === 'running' && run && run.status !== 'running';
 
+  if (detail.target_database) {
+    els.input.placeholder = `Ask about ${detail.target_database}...`;
+  }
+
   if (isNewThread || reachedTerminal || !run || run.status !== 'running') {
     fullRender(detail);
   } else {
@@ -360,6 +372,7 @@ function newThread() {
   bindExampleButtons();
   renderSidebar();
   setComposerEnabled(true);
+  els.input.placeholder = 'Ask a question about your database...';
   els.input.focus();
 }
 
@@ -373,12 +386,17 @@ async function submitQuestion(event) {
   setComposerEnabled(false);
 
   try {
+    const payload = { question };
+    if (!state.activeThreadId && state.target.connectionId && state.target.database) {
+      payload.connectionId = state.target.connectionId;
+      payload.database = state.target.database;
+    }
     const path = state.activeThreadId
       ? `/threads/${state.activeThreadId}/messages`
       : '/threads';
     const { body } = await api(path, {
       method: 'POST',
-      body: JSON.stringify({ question }),
+      body: JSON.stringify(payload),
     });
     state.activeThreadId = body.threadId;
     await refreshThreads();
@@ -407,6 +425,122 @@ async function checkHealth() {
   }
 }
 
+/* ---------- Target database selection ---------- */
+
+async function loadConnections() {
+  try {
+    const { body } = await api('/connections');
+    const current = els.connectionSelect.value;
+    const options = ['<option value="">Default TraceIQ database</option>']
+      .concat(body.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${escapeHtml(c.host)})</option>`));
+    els.connectionSelect.innerHTML = options.join('');
+    if ([...els.connectionSelect.options].some(o => o.value === current)) {
+      els.connectionSelect.value = current;
+    } else {
+      state.target = { connectionId: '', database: '' };
+      els.databaseSelect.disabled = true;
+      els.databaseSelect.innerHTML = '<option value="">—</option>';
+    }
+  } catch { /* health dot already signals API issues */ }
+}
+
+async function onConnectionChange() {
+  state.target = { connectionId: els.connectionSelect.value, database: '' };
+  if (!state.target.connectionId) {
+    els.databaseSelect.disabled = true;
+    els.databaseSelect.innerHTML = '<option value="">—</option>';
+    return;
+  }
+  els.databaseSelect.disabled = true;
+  els.databaseSelect.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const { body } = await api(`/connections/${encodeURIComponent(state.target.connectionId)}/databases`);
+    const dbs = body.databases || [];
+    els.databaseSelect.innerHTML = dbs.length
+      ? dbs.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('')
+      : '<option value="">No databases visible</option>';
+    els.databaseSelect.disabled = false;
+    if (dbs.length) {
+      els.databaseSelect.value = dbs[0];
+      state.target.database = dbs[0];
+    }
+  } catch (err) {
+    els.databaseSelect.innerHTML = `<option value="">${escapeHtml(err.message)}</option>`;
+  }
+}
+
+/* ---------- Connections modal ---------- */
+
+function openConnectionsModal() {
+  els.connectionsModal.classList.remove('hidden');
+  renderConnectionsList();
+}
+
+function closeConnectionsModal() {
+  els.connectionsModal.classList.add('hidden');
+}
+
+async function renderConnectionsList() {
+  els.connectionsList.innerHTML = '<li class="conn-empty">Loading…</li>';
+  try {
+    const { body } = await api('/connections');
+    if (!body.length) {
+      els.connectionsList.innerHTML = '<li class="conn-empty">No connections yet. Add a MySQL server below.</li>';
+      return;
+    }
+    els.connectionsList.innerHTML = '';
+    for (const c of body) {
+      const li = document.createElement('li');
+      li.className = 'conn-item';
+      li.innerHTML = `
+        <div class="conn-info">
+          <strong>${escapeHtml(c.name)}</strong>
+          <span>${escapeHtml(c.user)}@${escapeHtml(c.host)}:${c.port}</span>
+        </div>
+        <button type="button" class="icon-btn conn-delete" data-id="${escapeHtml(c.id)}" title="Delete connection">&times;</button>`;
+      li.querySelector('.conn-delete').addEventListener('click', async () => {
+        if (!confirm(`Delete connection "${c.name}"? Existing chats bound to it will fail.`)) return;
+        try {
+          await api(`/connections/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+          await renderConnectionsList();
+          await loadConnections();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+      els.connectionsList.appendChild(li);
+    }
+  } catch (err) {
+    els.connectionsList.innerHTML = `<li class="conn-empty">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+async function submitConnection(event) {
+  event.preventDefault();
+  const btn = document.getElementById('add-connection-submit');
+  const payload = {
+    name: document.getElementById('conn-name').value.trim(),
+    host: document.getElementById('conn-host').value.trim(),
+    port: Number(document.getElementById('conn-port').value) || 3306,
+    user: document.getElementById('conn-user').value.trim(),
+    password: document.getElementById('conn-password').value,
+  };
+  btn.disabled = true;
+  btn.textContent = 'Testing connection…';
+  try {
+    await api('/connections', { method: 'POST', body: JSON.stringify(payload) });
+    els.addConnectionForm.reset();
+    document.getElementById('conn-port').value = '3306';
+    await renderConnectionsList();
+    await loadConnections();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Connect server';
+  }
+}
+
 /* ---------- Wiring ---------- */
 
 function bindExampleButtons() {
@@ -421,8 +555,16 @@ function bindExampleButtons() {
 els.newThreadBtn.addEventListener('click', newThread);
 els.form.addEventListener('submit', submitQuestion);
 els.input.addEventListener('input', autoGrow);
+els.connectionSelect.addEventListener('change', onConnectionChange);
+els.manageConnectionsBtn.addEventListener('click', openConnectionsModal);
+els.closeConnectionsModal.addEventListener('click', closeConnectionsModal);
+els.connectionsModal.addEventListener('click', (e) => {
+  if (e.target === els.connectionsModal) closeConnectionsModal();
+});
+els.addConnectionForm.addEventListener('submit', submitConnection);
 
 checkHealth();
 setInterval(checkHealth, 30000);
 refreshThreads();
+loadConnections();
 newThread();

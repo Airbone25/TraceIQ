@@ -70,8 +70,10 @@ describe('Threads API', () => {
         threadId: 'thread-new',
         investigationId: 'inv-new',
         status: 'queued',
+        connectionId: null,
+        database: null,
       });
-      expect(mocks.createThread).toHaveBeenCalledWith('Why did orders drop?');
+      expect(mocks.createThread).toHaveBeenCalledWith('Why did orders drop?', { connectionId: null, database: null });
       expect(mocks.addMessage).toHaveBeenCalledWith('thread-new', 'user', 'Why did orders drop?');
       expect(mocks.createInvestigation).toHaveBeenCalledWith('Why did orders drop?', 'thread-new');
       expect(mocks.startJob).toHaveBeenCalledWith({

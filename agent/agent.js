@@ -9,6 +9,7 @@ import { overviewTool } from '../tools/overview.tool.js';
 import { chatCompletion, RateLimitError } from '../llm/groq.js';
 import { compressHistory } from './context.js';
 import { createInvestigation, addStep, finalizeInvestigation } from '../database/investigation-store.js';
+import { resolveExecutionContext } from '../services/target-context.js';
 
 const logger = pino({ name: 'agent' });
 
@@ -68,8 +69,8 @@ function buildThreadContextMessage(threadContext) {
   ].join('\n');
 }
 
-async function loadDatabaseOverview() {
-  const result = await overviewTool.execute({});
+async function loadDatabaseOverview(toolContext) {
+  const result = await overviewTool.execute({}, toolContext);
   if (!result?.success) {
     throw new Error(result?.error || 'Overview unavailable');
   }
@@ -97,7 +98,13 @@ function renderDatabaseOverview(overview) {
 }
 
 export async function runInvestigation(userQuestion, options = {}) {
-  const { investigationId: existingId = null, threadId = null, threadContext = [] } = options;
+  const {
+    investigationId: existingId = null,
+    threadId = null,
+    threadContext = [],
+    connectionId = null,
+    database = null,
+  } = options;
   const state = createAgentState(userQuestion);
   let investigationId = existingId;
 
@@ -107,12 +114,22 @@ export async function runInvestigation(userQuestion, options = {}) {
       investigationId = id;
     }
 
+    let toolContext;
+    try {
+      toolContext = await resolveExecutionContext({ connectionId, database });
+      if (toolContext) {
+        logger.info({ connectionId, database }, 'Investigation bound to external database');
+      }
+    } catch (err) {
+      throw new Error(`Target database unavailable: ${err.message}`);
+    }
+
     let messages = [
       { role: 'system', content: buildSystemPrompt() },
     ];
 
     try {
-      const overview = await loadDatabaseOverview();
+      const overview = await loadDatabaseOverview(toolContext);
       messages.push({ role: 'system', content: renderDatabaseOverview(overview) });
       logger.info('Database overview injected');
     } catch (err) {
@@ -208,7 +225,7 @@ export async function runInvestigation(userQuestion, options = {}) {
           logger.info({ tool: toolName, step: state.steps + 1 }, 'Tool cache hit');
         } else {
           try {
-            result = await registry.execute(toolName, toolInput);
+            result = await registry.execute(toolName, toolInput, toolContext);
           } catch (err) {
             result = { success: false, error: err.message };
           }

@@ -31,7 +31,7 @@ export class ToolRegistry {
     }));
   }
 
-  async execute(name, input) {
+  async execute(name, input, context = undefined) {
     const tool = this.tools.get(name);
     if (!tool) {
       throw new Error(`Tool not found: ${name}`);
@@ -46,6 +46,6 @@ export class ToolRegistry {
       input = parsed.data;
     }
 
-    return tool.execute(input);
+    return tool.execute(input, context);
   }
 }

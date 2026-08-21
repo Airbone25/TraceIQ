@@ -32,6 +32,12 @@ async function migrate(conn) {
     );
     logger.info('Migration applied: investigations.thread_id');
   }
+  if (!(await columnExists(conn, 'investigation_threads', 'connection_id'))) {
+    await conn.execute(
+      'ALTER TABLE investigation_threads ADD COLUMN connection_id VARCHAR(36) NULL AFTER title, ADD COLUMN target_database VARCHAR(64) NULL AFTER connection_id'
+    );
+    logger.info('Migration applied: investigation_threads.connection_id + target_database');
+  }
 }
 
 async function setup() {

@@ -10,6 +10,9 @@ if (process.env.NODE_ENV === 'test') {
 const envSchema = z.object({
   GROQ_API_KEY: z.string().min(1, 'GROQ_API_KEY is required'),
   GROQ_MODEL: z.string().default('groq/compound'),
+  APP_SECRET: z.string()
+    .regex(/^[0-9a-fA-F]{64}$/, 'APP_SECRET must be a 64-character hex string (generate with: openssl rand -hex 32)')
+    .default('9f2b7c4e1a8d5f30c6b9e2d4a7f10c385e60b92d4a7c1f83e6b05d294a7cf102'),
   MYSQL_HOST: z.string().default('localhost'),
   MYSQL_PORT: z.coerce.number().int().positive().default(3306),
   MYSQL_USER: z.string().min(1, 'MYSQL_USER is required'),
@@ -37,4 +40,9 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export default parsed.data;
+const env = parsed.data;
+if (!process.env.APP_SECRET && process.env.NODE_ENV !== 'test') {
+  console.warn('WARNING: APP_SECRET not set - using insecure default. Set it in .env (openssl rand -hex 32) before storing any connection credentials.');
+}
+
+export default env;

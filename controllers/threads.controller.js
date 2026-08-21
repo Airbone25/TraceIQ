@@ -13,7 +13,9 @@ import {
   deleteThread,
 } from '../database/thread-store.js';
 import { createInvestigation } from '../database/investigation-store.js';
+import { getConnectionRow } from '../database/connection-store.js';
 import { startJob } from '../services/job-runner.js';
+import { validateDatabaseName } from './connections.controller.js';
 import env from '../config/env.js';
 
 const logger = pino({ name: 'threads-controller' });
@@ -25,12 +27,31 @@ export async function createThreadHandler(req, res) {
   }
   const question = validation.value;
 
+  let connectionId = null;
+  let database = null;
+  if (req.body?.connectionId != null || req.body?.database != null) {
+    connectionId = req.body.connectionId;
+    database = req.body.database;
+    if (!connectionId || !validateDatabaseName(database)) {
+      return res.status(400).json({ error: 'connectionId and a valid database name are required to target an external database' });
+    }
+    try {
+      const connection = await getConnectionRow(connectionId);
+      if (!connection) {
+        return res.status(404).json({ error: 'Connection not found' });
+      }
+    } catch (err) {
+      logger.error({ err: err.message }, 'Failed to verify connection');
+      return res.status(500).json({ error: 'Failed to verify connection' });
+    }
+  }
+
   try {
-    const thread = await createThread(question.substring(0, 255));
+    const thread = await createThread(question.substring(0, 255), { connectionId, database });
     await addMessage(thread.id, 'user', question);
     const { id: investigationId } = await createInvestigation(question, thread.id);
 
-    res.status(202).json({ threadId: thread.id, investigationId, status: 'queued' });
+    res.status(202).json({ threadId: thread.id, investigationId, status: 'queued', connectionId, database });
     startJob({ investigationId, question, threadId: thread.id });
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to create thread');

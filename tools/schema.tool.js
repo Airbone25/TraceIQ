@@ -13,8 +13,8 @@ export const schemaTool = {
   },
   schema: parameters,
 
-  async execute() {
-    const schema = await getSchemaInfo();
+  async execute(_input, context = undefined) {
+    const schema = await getSchemaInfo(context?.exec);
     const tables = Object.keys(schema);
     const summary = tables.map(t => {
       const cols = schema[t].columns.map(c => `${c.name} ${c.type}${c.key ? ` [${c.key}]` : ''}`);

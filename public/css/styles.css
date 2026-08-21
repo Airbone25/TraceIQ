@@ -253,3 +253,94 @@ body {
 
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ---------- Target database bar ---------- */
+.target-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+.target-label { color: var(--text-muted); font-size: 13px; white-space: nowrap; }
+.target-bar select {
+  background: var(--bg-composer);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  max-width: 220px;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  margin-left: auto;
+  padding: 4px;
+}
+.link-btn:hover { text-decoration: underline; }
+
+/* ---------- Connections modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal-backdrop.hidden { display: none; }
+.modal {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: min(480px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.modal-header h3 { margin: 0; font-size: 17px; }
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+.connections-list { list-style: none; margin: 0 0 16px; padding: 0; }
+.conn-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-composer);
+  margin-bottom: 8px;
+}
+.conn-info { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.conn-info span { color: var(--text-muted); font-size: 12px; }
+.conn-empty { color: var(--text-muted); font-size: 13px; padding: 8px 4px; list-style: none; }
+.add-connection-form { display: flex; flex-direction: column; gap: 10px; }
+.add-connection-form input {
+  background: var(--bg-composer);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.conn-row { display: flex; gap: 8px; }
+.conn-note { color: var(--text-muted); font-size: 11.5px; margin: 0; line-height: 1.5; }

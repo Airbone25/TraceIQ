@@ -8,11 +8,14 @@ export function generateThreadId() {
   return crypto.randomUUID();
 }
 
-export async function createThread(title) {
+export async function createThread(title, { connectionId = null, database = null } = {}) {
   const id = generateThreadId();
-  await query('INSERT INTO investigation_threads (id, title) VALUES (?, ?)', [id, title]);
-  logger.info({ id, title }, 'Thread created');
-  return { id, title };
+  await query(
+    'INSERT INTO investigation_threads (id, title, connection_id, target_database) VALUES (?, ?, ?, ?)',
+    [id, title, connectionId, database]
+  );
+  logger.info({ id, title, connectionId, database }, 'Thread created');
+  return { id, title, connectionId, database };
 }
 
 export async function addMessage(threadId, role, content) {

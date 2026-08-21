@@ -15,12 +15,13 @@ export const overviewTool = {
   parameters,
   schema: overviewSchema,
 
-  async execute() {
+  async execute(_input, context = undefined) {
     try {
       const start = Date.now();
+      const exec = context?.exec;
       const [counts, dateRanges] = await Promise.all([
-        getTableRowCounts(),
-        getDateColumnRanges().catch(() => []),
+        getTableRowCounts(exec),
+        getDateColumnRanges(exec).catch(() => []),
       ]);
       return {
         success: true,

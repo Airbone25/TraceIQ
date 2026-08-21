@@ -3,6 +3,8 @@ import { query } from '../database/mysql.js';
 import { validateSql } from '../security/sql-validator.js';
 import env from '../config/env.js';
 
+const defaultExec = { query };
+
 const parameters = z.object({
   sql: z.string().describe('The SQL query to execute. Must be a SELECT, SHOW, DESCRIBE, or EXPLAIN statement.'),
   params: z.array(z.union([z.string(), z.number()])).optional().describe('Parameterized query values.'),
@@ -28,7 +30,7 @@ export const sqlTool = {
   },
   schema: parameters,
 
-  async execute({ sql, params = [] }) {
+  async execute({ sql, params = [] }, context = undefined) {
     const validation = validateSql(sql, { maxRows: env.MAX_QUERY_ROWS });
     if (!validation.valid) {
       return {
@@ -44,7 +46,7 @@ export const sqlTool = {
 
     try {
       const start = Date.now();
-      const rows = await query(limitedSql, params);
+      const rows = await (context?.exec ?? defaultExec).query(limitedSql, params);
       const duration = Date.now() - start;
       return {
         success: true,

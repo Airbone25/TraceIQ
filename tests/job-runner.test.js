@@ -49,7 +49,7 @@ describe('Job Runner', () => {
   it('should run the job and persist assistant message for thread runs', async () => {
     await startJob({ investigationId: 'inv-1', question: 'Why?', threadId: 'thread-1' });
 
-    expect(mockRunInvestigation).toHaveBeenCalledWith('Why?', { investigationId: 'inv-1', threadId: 'thread-1', threadContext: [] });
+    expect(mockRunInvestigation).toHaveBeenCalledWith('Why?', { investigationId: 'inv-1', threadId: 'thread-1', threadContext: [], connectionId: null, database: null });
     expect(mockAddMessage).toHaveBeenCalledWith('thread-1', 'assistant', 'Found the root cause.');
     expect(mockRelease).toHaveBeenCalledTimes(1);
     expect(isJobActive('inv-1')).toBe(false);
@@ -71,7 +71,7 @@ describe('Job Runner', () => {
   });
 
   it('should skip assistant message when thread was deleted during the run', async () => {
-    mockGetThread.mockResolvedValueOnce(null);
+    mockGetThread.mockResolvedValue(null);
 
     await startJob({ investigationId: 'inv-9', question: 'Deleted mid-run?', threadId: 'thread-9' });
 
@@ -95,6 +95,8 @@ describe('Job Runner', () => {
       investigationId: 'inv-5',
       threadId: 'thread-5',
       threadContext: context,
+      connectionId: null,
+      database: null,
     });
   });
 

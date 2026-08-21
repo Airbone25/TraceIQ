@@ -126,3 +126,15 @@ CREATE TABLE IF NOT EXISTS investigation_steps (
   FOREIGN KEY (investigation_id) REFERENCES investigations(id) ON DELETE CASCADE,
   INDEX idx_investigation_steps_investigation_id (investigation_id)
 );
+
+CREATE TABLE IF NOT EXISTS db_connections (
+  id VARCHAR(36) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  host VARCHAR(255) NOT NULL,
+  port INT UNSIGNED NOT NULL DEFAULT 3306,
+  db_user VARCHAR(120) NOT NULL,
+  password_enc TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE KEY uq_db_connections_name (name)
+);
