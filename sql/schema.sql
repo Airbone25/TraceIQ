@@ -78,15 +78,18 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE TABLE IF NOT EXISTS investigation_threads (
   id VARCHAR(36) PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
+  user_id VARCHAR(36) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-  INDEX idx_investigation_threads_updated (updated_at)
+  INDEX idx_investigation_threads_updated (updated_at),
+  INDEX idx_investigation_threads_user (user_id)
 );
 
 CREATE TABLE IF NOT EXISTS investigations (
   id VARCHAR(36) PRIMARY KEY,
   thread_id VARCHAR(36) NULL,
+  user_id VARCHAR(36) NULL,
   question TEXT NOT NULL,
   status ENUM('running', 'completed', 'failed') NOT NULL DEFAULT 'running',
   started_at TIMESTAMP NOT NULL,
@@ -127,6 +130,15 @@ CREATE TABLE IF NOT EXISTS investigation_steps (
   INDEX idx_investigation_steps_investigation_id (investigation_id)
 );
 
+CREATE TABLE IF NOT EXISTS users (
+  id VARCHAR(36) PRIMARY KEY,
+  email VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(100) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE KEY uq_users_email (email)
+);
+
 CREATE TABLE IF NOT EXISTS db_connections (
   id VARCHAR(36) PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
@@ -134,7 +146,9 @@ CREATE TABLE IF NOT EXISTS db_connections (
   port INT UNSIGNED NOT NULL DEFAULT 3306,
   db_user VARCHAR(120) NOT NULL,
   password_enc TEXT NOT NULL,
+  user_id VARCHAR(36) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-  UNIQUE KEY uq_db_connections_name (name)
+  UNIQUE KEY uq_db_connections_name (name),
+  INDEX idx_db_connections_user (user_id)
 );

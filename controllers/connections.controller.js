@@ -45,10 +45,10 @@ export async function createConnectionHandler(req, res) {
       port: portNum,
       user: user.trim(),
       password,
+      userId: req.userId,
     });
     res.status(201).json(created);
-  } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') {
+  } catch (err) {    if (err.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: `A connection named "${name}" already exists` });
     }
     logger.error({ err: err.message }, 'Failed to store connection');
@@ -56,9 +56,9 @@ export async function createConnectionHandler(req, res) {
   }
 }
 
-export async function listConnectionsHandler(_req, res) {
+export async function listConnectionsHandler(req, res) {
   try {
-    const rows = await listConnections();
+    const rows = await listConnections(req.userId);
     res.json(rows);
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to list connections');
@@ -68,7 +68,7 @@ export async function listConnectionsHandler(_req, res) {
 
 export async function deleteConnectionHandler(req, res) {
   try {
-    const deleted = await deleteConnection(req.params.id);
+    const deleted = await deleteConnection(req.params.id, req.userId);
     if (!deleted) {
       return res.status(404).json({ error: 'Connection not found' });
     }
@@ -81,11 +81,11 @@ export async function deleteConnectionHandler(req, res) {
 
 export async function listDatabasesHandler(req, res) {
   try {
-    const row = await getConnectionRow(req.params.id);
+    const row = await getConnectionRow(req.params.id, req.userId);
     if (!row) {
       return res.status(404).json({ error: 'Connection not found' });
     }
-    const databases = await listDatabasesOnConnection(req.params.id);
+    const databases = await listDatabasesOnConnection(req.params.id, req.userId);
     res.json({ databases });
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to list databases');

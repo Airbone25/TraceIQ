@@ -36,7 +36,7 @@ export async function createThreadHandler(req, res) {
       return res.status(400).json({ error: 'connectionId and a valid database name are required to target an external database' });
     }
     try {
-      const connection = await getConnectionRow(connectionId);
+      const connection = await getConnectionRow(connectionId, req.userId);
       if (!connection) {
         return res.status(404).json({ error: 'Connection not found' });
       }
@@ -47,9 +47,9 @@ export async function createThreadHandler(req, res) {
   }
 
   try {
-    const thread = await createThread(question.substring(0, 255), { connectionId, database });
+    const thread = await createThread(question.substring(0, 255), { connectionId, database, userId: req.userId });
     await addMessage(thread.id, 'user', question);
-    const { id: investigationId } = await createInvestigation(question, thread.id);
+    const { id: investigationId } = await createInvestigation(question, thread.id, req.userId);
 
     res.status(202).json({ threadId: thread.id, investigationId, status: 'queued', connectionId, database });
     startJob({ investigationId, question, threadId: thread.id });
@@ -68,7 +68,7 @@ export async function addFollowUpMessage(req, res) {
   const question = validation.value;
 
   try {
-    const thread = await getThread(id);
+    const thread = await getThread(id, req.userId);
     if (!thread) {
       return res.status(404).json({ error: 'Thread not found' });
     }
@@ -82,7 +82,7 @@ export async function addFollowUpMessage(req, res) {
 
     const threadContext = await getThreadContext(id, env.THREAD_CONTEXT_TURNS);
     await addMessage(id, 'user', question);
-    const { id: investigationId } = await createInvestigation(question, id);
+    const { id: investigationId } = await createInvestigation(question, id, req.userId);
 
     res.status(202).json({ threadId: id, investigationId, status: 'queued' });
     startJob({ investigationId, question, threadId: id, threadContext });
@@ -94,7 +94,7 @@ export async function addFollowUpMessage(req, res) {
 
 export async function listThreadsHandler(req, res) {
   try {
-    res.json(await listThreads());
+    res.json(await listThreads(req.userId));
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to list threads');
     res.status(500).json({ error: 'Failed to list threads', detail: err.message });
@@ -104,7 +104,7 @@ export async function listThreadsHandler(req, res) {
 export async function getThreadDetail(req, res) {
   const { id } = req.params;
   try {
-    const thread = await getThread(id);
+    const thread = await getThread(id, req.userId);
     if (!thread) {
       return res.status(404).json({ error: 'Thread not found' });
     }
@@ -123,7 +123,7 @@ export async function getThreadDetail(req, res) {
 export async function deleteThreadHandler(req, res) {
   const { id } = req.params;
   try {
-    const deleted = await deleteThread(id);
+    const deleted = await deleteThread(id, req.userId);
     if (!deleted) {
       return res.status(404).json({ error: 'Thread not found' });
     }

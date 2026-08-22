@@ -10,6 +10,13 @@ const mocks = vi.hoisted(() => ({
   listDatabasesOnConnection: vi.fn().mockResolvedValue(['sales_db', 'financial_db']),
 }));
 
+vi.mock('../middleware/auth.js', () => ({
+  requireAuth: (req, res, next) => { req.userId = 'user-1'; next(); },
+  setSessionCookie: vi.fn(),
+  clearSessionCookie: vi.fn(),
+  SESSION_COOKIE: 'tq_session',
+}));
+
 vi.mock('../database/connection-store.js', () => ({
   createConnection: mocks.createConnection,
   listConnections: mocks.listConnections,
@@ -92,6 +99,7 @@ describe('Connections API', () => {
       const res = await request(app).get('/api/connections');
 
       expect(res.status).toBe(200);
+      expect(mocks.listConnections).toHaveBeenCalledWith('user-1');
       expect(res.body[0]).not.toHaveProperty('password_enc');
     });
   });
@@ -100,6 +108,7 @@ describe('Connections API', () => {
     it('should return 204 on success and 404 when missing', async () => {
       const ok = await request(app).delete('/api/connections/conn-9');
       expect(ok.status).toBe(204);
+      expect(mocks.deleteConnection).toHaveBeenCalledWith('conn-9', 'user-1');
 
       mocks.deleteConnection.mockResolvedValue(false);
       const missing = await request(app).delete('/api/connections/nope');

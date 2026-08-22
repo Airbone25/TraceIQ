@@ -20,7 +20,8 @@ describe('Schema', () => {
     expect(tables).toContain('investigation_messages');
 expect(tables).toContain('investigation_steps');
 expect(tables).toContain('db_connections');
-expect(tables.length).toBe(10);
+expect(tables).toContain('users');
+expect(tables.length).toBe(11);
   });
 
   it('should have correct columns on customers', async () => {

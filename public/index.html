@@ -7,7 +7,22 @@
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-  <div class="layout">
+  <div id="auth-view" class="auth-view hidden">
+    <div class="auth-card">
+      <h1>TraceIQ</h1>
+      <p class="auth-sub">AI investigations for your MySQL databases</p>
+      <form id="auth-form">
+        <input id="auth-email" type="email" placeholder="Email" required autocomplete="email">
+        <input id="auth-password" type="password" placeholder="Password (min 8 characters)" required minlength="8"
+               autocomplete="current-password">
+        <button type="submit" id="auth-submit" class="primary-btn">Sign in</button>
+        <p id="auth-error" class="auth-error"></p>
+      </form>
+      <p class="auth-toggle"><span id="auth-toggle-text">No account?</span> <a href="#" id="auth-switch">Create one</a></p>
+    </div>
+  </div>
+
+  <div class="layout hidden" id="app-layout">
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">TraceIQ</div>
@@ -15,6 +30,7 @@
       </div>
       <button id="new-thread-btn" class="new-thread-btn">+ New Investigation</button>
       <ul id="thread-list" class="thread-list"></ul>
+      <button id="logout-btn" class="link-btn logout-btn">Sign out</button>
     </aside>
 
     <main class="chat-pane">

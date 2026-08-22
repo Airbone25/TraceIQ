@@ -8,11 +8,11 @@ export function generateThreadId() {
   return crypto.randomUUID();
 }
 
-export async function createThread(title, { connectionId = null, database = null } = {}) {
+export async function createThread(title, { connectionId = null, database = null, userId = null } = {}) {
   const id = generateThreadId();
   await query(
-    'INSERT INTO investigation_threads (id, title, connection_id, target_database) VALUES (?, ?, ?, ?)',
-    [id, title, connectionId, database]
+    'INSERT INTO investigation_threads (id, title, user_id, connection_id, target_database) VALUES (?, ?, ?, ?, ?)',
+    [id, title, userId, connectionId, database]
   );
   logger.info({ id, title, connectionId, database }, 'Thread created');
   return { id, title, connectionId, database };
@@ -33,18 +33,22 @@ export async function getMessages(threadId) {
   );
 }
 
-export async function listThreads() {
+export async function listThreads(userId) {
   return query(`
     SELECT t.id, t.title, t.target_database, t.connection_id, t.created_at, t.updated_at,
       (SELECT status FROM investigations i WHERE i.thread_id = t.id ORDER BY i.started_at DESC LIMIT 1) AS latest_status,
       (SELECT COUNT(*) FROM investigation_messages m WHERE m.thread_id = t.id) AS message_count
     FROM investigation_threads t
+    WHERE t.user_id = ?
     ORDER BY t.updated_at DESC
-  `);
+  `, [userId]);
 }
 
-export async function getThread(id) {
-  const rows = await query('SELECT * FROM investigation_threads WHERE id = ?', [id]);
+export async function getThread(id, userId = null) {
+  const rows = await query(
+    'SELECT * FROM investigation_threads WHERE id = ?' + (userId ? ' AND user_id = ?' : ''),
+    userId ? [id, userId] : [id]
+  );
   return rows.length > 0 ? rows[0] : null;
 }
 
@@ -87,8 +91,8 @@ export async function getThreadContext(threadId, maxTurns) {
   return rows.reverse().map(r => ({ question: r.question, answer: r.final_answer }));
 }
 
-export async function deleteThread(id) {
-  const existing = await getThread(id);
+export async function deleteThread(id, userId = null) {
+  const existing = await getThread(id, userId);
   if (!existing) return false;
 
   await query(

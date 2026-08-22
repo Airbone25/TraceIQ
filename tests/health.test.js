@@ -3,6 +3,13 @@ import request from 'supertest';
 import app from '../src/server.js';
 import { closePool } from '../database/mysql.js';
 
+vi.mock('../middleware/auth.js', () => ({
+  requireAuth: (req, res, next) => { req.userId = 'user-1'; next(); },
+  setSessionCookie: vi.fn(),
+  clearSessionCookie: vi.fn(),
+  SESSION_COOKIE: 'tq_session',
+}));
+
 vi.mock('../database/investigation-store.js', () => ({
   createInvestigation: vi.fn().mockResolvedValue({ id: 'test-id', startedAt: new Date() }),
   addStep: vi.fn().mockResolvedValue(),

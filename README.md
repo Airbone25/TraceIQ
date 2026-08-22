@@ -96,6 +96,7 @@ The core design enforces a strict separation of concerns: the LLM never directly
 - **Async job execution** — `POST /api/investigate` returns `202` immediately and runs in the background; orphaned runs are reconciled as failed on server restart
 - **Investigation threads with follow-ups** — ask follow-up questions that continue from prior findings in a ChatGPT-style conversation, with prior answers injected as bounded context
 - **Bring your own database** — register any MySQL server (host/user/password) in the UI or API; credentials are encrypted at rest (AES-256-GCM), databases are browsable per connection, and each chat can target a different database
+- **User accounts** — email/password sign-up with bcrypt hashing; sessions via signed JWTs in httpOnly cookies; every connection, thread, and investigation is private to its owner
 - **Schema-agnostic investigations** — an auto-injected database overview (table sizes + date ranges) grounds the agent on any schema; no domain-specific tooling required
 - **Web dashboard** — built-in chat UI served at `/`: sidebar of investigation threads, live step progress while investigating, rendered evidence-backed answers
 
@@ -149,7 +150,15 @@ The server starts on `http://localhost:3001`. Open it in a browser for the built
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/health` | Database connectivity check |
+| `GET` | `/api/health` | Database connectivity check (public) |
+| `POST` | `/api/auth/register` | Create an account (`email`, `password` ≥ 8 chars) → sets session cookie |
+| `POST` | `/api/auth/login` | Sign in → sets session cookie (`401` on bad credentials) |
+| `POST` | `/api/auth/logout` | Clear the session cookie |
+| `GET` | `/api/auth/me` | Current account from the session cookie |
+
+All endpoints below require a valid session cookie and return data scoped to the signed-in user.
+
+| Method | Endpoint | Description |
 | `POST` | `/api/investigate` | Submit an investigation question → `202 {investigationId}` (runs in background) |
 | `GET` | `/api/investigations` | List all past investigations |
 | `GET` | `/api/investigate/:id` | Retrieve a persisted investigation with its step timeline |
@@ -219,7 +228,7 @@ All configuration is via environment variables (loaded from `.env`):
 | `INVESTIGATION_QUEUE_TIMEOUT_MS` | `10000` | How long a queued investigation waits before failing with a queue-timeout error |
 | `THREAD_CONTEXT_TURNS` | `3` | Max prior Q&A turns injected as context for follow-up questions |
 | `THREAD_CONTEXT_ANSWER_CHARS` | `2000` | Per-answer character cap when injecting thread context |
-| `APP_SECRET` | *(insecure default)* | 64-char hex key used to encrypt stored connection passwords (AES-256-GCM). **Set this in any non-local deployment** — a warning is logged at startup when unset |
+| `APP_SECRET` | *(insecure default)* | 64-char hex key used to encrypt stored connection passwords (AES-256-GCM) **and** to sign session JWTs. **Set this in any non-local deployment** — a warning is logged at startup when unset |
 
 ## Database Schema
 
@@ -267,15 +276,23 @@ payments
 investigation_threads
 ├── id (PK, UUID)
 ├── title
+├── user_id (nullable FK -> users)
 ├── connection_id (nullable FK -> db_connections)
 ├── target_database (nullable) — database this chat investigates
 └── created_at, updated_at
 
 db_connections
 ├── id (PK, UUID)
-├── name (unique display name)
+├── name (unique per user display name)
 ├── host, port, db_user
 ├── password_enc — AES-256-GCM ciphertext
+├── user_id (nullable FK -> users)
+└── created_at
+
+users
+├── id (PK, UUID)
+├── email (unique)
+├── password_hash — bcrypt
 └── created_at
 
 investigations

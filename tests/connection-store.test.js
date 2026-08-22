@@ -40,19 +40,22 @@ describe('Connection Store', () => {
       port: 3307,
       user: 'reader',
       password: 'super-secret',
+      userId: 'user-1',
     });
 
     const [sql, params] = mockQuery.mock.calls[0];
     expect(sql).toContain('INSERT INTO db_connections');
     expect(params[5]).not.toContain('super-secret');
     expect(params[5]).toMatch(/^v1:/);
+    expect(params[6]).toBe('user-1');
     expect(created).toEqual({ id: params[0], name: 'Prod', host: 'db.internal', port: 3307, user: 'reader' });
   });
 
   it('should list connections without the encrypted column', async () => {
     mockQuery.mockResolvedValueOnce([{ id: 'c1', name: 'Prod' }]);
-    const rows = await listConnections();
+    const rows = await listConnections('user-1');
     expect(mockQuery.mock.calls[0][0]).not.toContain('password_enc');
+    expect(mockQuery.mock.calls[0][1]).toEqual(['user-1']);
     expect(rows).toEqual([{ id: 'c1', name: 'Prod' }]);
   });
 

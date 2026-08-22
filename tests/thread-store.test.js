@@ -36,19 +36,19 @@ describe('Thread Store', () => {
 
   describe('createThread', () => {
     it('should insert a thread with generated id and title', async () => {
-      const { id, title } = await createThread('Why did orders drop?');
+      const { id, title } = await createThread('Why did orders drop?', { userId: 'user-1' });
       expect(id).toBeTruthy();
       expect(title).toBe('Why did orders drop?');
       expect(mockQuery).toHaveBeenCalledWith(
-        'INSERT INTO investigation_threads (id, title, connection_id, target_database) VALUES (?, ?, ?, ?)',
-        [id, 'Why did orders drop?', null, null]
+        'INSERT INTO investigation_threads (id, title, user_id, connection_id, target_database) VALUES (?, ?, ?, ?, ?)',
+        [id, 'Why did orders drop?', 'user-1', null, null]
       );
     });
 
     it('should store the database binding when provided', async () => {
-      await createThread('Bound question', { connectionId: 'conn-1', database: 'sales_db' });
+      await createThread('Bound question', { connectionId: 'conn-1', database: 'sales_db', userId: 'user-1' });
       const [, params] = mockQuery.mock.calls.at(-1);
-      expect(params.slice(2)).toEqual(['conn-1', 'sales_db']);
+      expect(params.slice(3)).toEqual(['conn-1', 'sales_db']);
     });
   });
 
@@ -80,12 +80,12 @@ describe('Thread Store', () => {
   });
 
   describe('listThreads', () => {
-    it('should return thread rows with latest status and counts', async () => {
+    it('should return thread rows with latest status and counts, scoped to the user', async () => {
       const rows = [{ id: 't1', title: 'A', latest_status: 'completed', message_count: 2 }];
       mockQuery.mockResolvedValueOnce(rows);
-      const result = await listThreads();
+      const result = await listThreads('user-1');
       expect(result).toEqual(rows);
-      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('ORDER BY t.updated_at DESC'));
+      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('WHERE t.user_id = ?'), ['user-1']);
     });
   });
 
@@ -99,6 +99,14 @@ describe('Thread Store', () => {
       const row = { id: 't1', title: 'A' };
       mockQuery.mockResolvedValueOnce([row]);
       expect(await getThread('t1')).toEqual(row);
+    });
+
+    it('should scope lookups by owner when a userId is provided', async () => {
+      mockQuery.mockResolvedValueOnce([{ id: 't1' }]);
+      await getThread('t1', 'user-1');
+      const [sql, params] = mockQuery.mock.calls[0];
+      expect(sql).toContain('AND user_id = ?');
+      expect(params).toEqual(['t1', 'user-1']);
     });
   });
 

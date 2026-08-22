@@ -38,6 +38,24 @@ async function migrate(conn) {
     );
     logger.info('Migration applied: investigation_threads.connection_id + target_database');
   }
+  if (!(await columnExists(conn, 'investigation_threads', 'user_id'))) {
+    await conn.execute(
+      'ALTER TABLE investigation_threads ADD COLUMN user_id VARCHAR(36) NULL AFTER title, ADD INDEX idx_investigation_threads_user (user_id)'
+    );
+    logger.info('Migration applied: investigation_threads.user_id');
+  }
+  if (!(await columnExists(conn, 'investigations', 'user_id'))) {
+    await conn.execute(
+      'ALTER TABLE investigations ADD COLUMN user_id VARCHAR(36) NULL AFTER thread_id, ADD INDEX idx_investigations_user (user_id)'
+    );
+    logger.info('Migration applied: investigations.user_id');
+  }
+  if (!(await columnExists(conn, 'db_connections', 'user_id'))) {
+    await conn.execute(
+      'ALTER TABLE db_connections ADD COLUMN user_id VARCHAR(36) NULL AFTER password_enc, ADD INDEX idx_db_connections_user (user_id)'
+    );
+    logger.info('Migration applied: db_connections.user_id');
+  }
 }
 
 async function setup() {

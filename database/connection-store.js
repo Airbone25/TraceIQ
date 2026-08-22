@@ -13,27 +13,33 @@ export function generateConnectionId() {
   return crypto.randomUUID();
 }
 
-export async function createConnection({ name, host, port = 3306, user, password }) {
+export async function createConnection({ name, host, port = 3306, user, password, userId = null }) {
   const id = generateConnectionId();
   await query(
-    'INSERT INTO db_connections (id, name, host, port, db_user, password_enc) VALUES (?, ?, ?, ?, ?, ?)',
-    [id, name, host, port, user, encryptSecret(password)]
+    'INSERT INTO db_connections (id, name, host, port, db_user, password_enc, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [id, name, host, port, user, encryptSecret(password), userId]
   );
   logger.info({ id, host, port }, 'Connection registered');
   return { id, name, host, port, user };
 }
 
-export async function listConnections() {
-  return query('SELECT id, name, host, port, db_user AS user, created_at FROM db_connections ORDER BY created_at ASC');
+export async function listConnections(userId) {
+  return query(
+    'SELECT id, name, host, port, db_user AS user, created_at FROM db_connections WHERE user_id = ? ORDER BY created_at ASC',
+    [userId]
+  );
 }
 
-export async function getConnectionRow(id) {
-  const rows = await query('SELECT * FROM db_connections WHERE id = ?', [id]);
+export async function getConnectionRow(id, userId = null) {
+  const rows = await query(
+    'SELECT * FROM db_connections WHERE id = ?' + (userId ? ' AND user_id = ?' : ''),
+    userId ? [id, userId] : [id]
+  );
   return rows.length > 0 ? rows[0] : null;
 }
 
-export async function getConnectionCredentials(id) {
-  const row = await getConnectionRow(id);
+export async function getConnectionCredentials(id, userId = null) {
+  const row = await getConnectionRow(id, userId);
   if (!row) return null;
   return {
     host: row.host,
@@ -43,8 +49,11 @@ export async function getConnectionCredentials(id) {
   };
 }
 
-export async function deleteConnection(id) {
-  const result = await query('DELETE FROM db_connections WHERE id = ?', [id]);
+export async function deleteConnection(id, userId = null) {
+  const result = await query(
+    'DELETE FROM db_connections WHERE id = ?' + (userId ? ' AND user_id = ?' : ''),
+    userId ? [id, userId] : [id]
+  );
   if (result.affectedRows > 0) {
     await closeTargetPools(id);
     logger.info({ id }, 'Connection deleted');
@@ -75,8 +84,8 @@ export async function verifyConnection(creds) {
   return true;
 }
 
-export async function listDatabasesOnConnection(id) {
-  const creds = await getConnectionCredentials(id);
+export async function listDatabasesOnConnection(id, userId = null) {
+  const creds = await getConnectionCredentials(id, userId);
   if (!creds) return null;
   const rows = await withEphemeralConnection(creds, (conn) => conn.query('SHOW DATABASES'));
   return rows[0]

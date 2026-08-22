@@ -19,6 +19,13 @@ const mocks = vi.hoisted(() => ({
   startJob: vi.fn(),
 }));
 
+vi.mock('../middleware/auth.js', () => ({
+  requireAuth: (req, res, next) => { req.userId = 'user-1'; next(); },
+  setSessionCookie: vi.fn(),
+  clearSessionCookie: vi.fn(),
+  SESSION_COOKIE: 'tq_session',
+}));
+
 vi.mock('../database/thread-store.js', () => ({
   generateThreadId: vi.fn(() => 'generated-thread-id'),
   createThread: mocks.createThread,
@@ -73,9 +80,9 @@ describe('Threads API', () => {
         connectionId: null,
         database: null,
       });
-      expect(mocks.createThread).toHaveBeenCalledWith('Why did orders drop?', { connectionId: null, database: null });
+      expect(mocks.createThread).toHaveBeenCalledWith('Why did orders drop?', { connectionId: null, database: null, userId: 'user-1' });
       expect(mocks.addMessage).toHaveBeenCalledWith('thread-new', 'user', 'Why did orders drop?');
-      expect(mocks.createInvestigation).toHaveBeenCalledWith('Why did orders drop?', 'thread-new');
+      expect(mocks.createInvestigation).toHaveBeenCalledWith('Why did orders drop?', 'thread-new', 'user-1');
       expect(mocks.startJob).toHaveBeenCalledWith({
         investigationId: 'inv-new',
         question: 'Why did orders drop?',
@@ -181,7 +188,7 @@ describe('Threads API', () => {
       mocks.deleteThread.mockResolvedValue(true);
       const res = await request(app).delete('/api/threads/t1');
       expect(res.status).toBe(204);
-      expect(mocks.deleteThread).toHaveBeenCalledWith('t1');
+      expect(mocks.deleteThread).toHaveBeenCalledWith('t1', 'user-1');
     });
 
     it('should return 404 for unknown thread', async () => {

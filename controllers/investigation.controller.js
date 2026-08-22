@@ -42,7 +42,7 @@ export async function investigate(req, res) {
   logger.info({ question }, 'Investigation requested');
 
   try {
-    const { id } = await createInvestigation(question);
+    const { id } = await createInvestigation(question, null, req.userId);
     res.status(202).json({ investigationId: id, status: 'queued' });
     startJob({ investigationId: id, question });
   } catch (err) {
@@ -58,7 +58,7 @@ export async function getInvestigationById(req, res) {
   }
 
   try {
-    const investigation = await getInvestigation(id);
+    const investigation = await getInvestigation(id, req.userId);
     if (!investigation) {
       return res.status(404).json({ error: 'Investigation not found' });
     }
@@ -71,7 +71,7 @@ export async function getInvestigationById(req, res) {
 
 export async function listAllInvestigations(req, res) {
   try {
-    const investigations = await listInvestigations();
+    const investigations = await listInvestigations(req.userId);
     res.json(investigations);
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to list investigations');

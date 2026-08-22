@@ -8,12 +8,12 @@ export function generateId() {
   return crypto.randomUUID();
 }
 
-export async function createInvestigation(question, threadId = null) {
+export async function createInvestigation(question, threadId = null, userId = null) {
   const id = generateId();
   const startedAt = new Date();
   await query(
-    'INSERT INTO investigations (id, thread_id, question, status, started_at) VALUES (?, ?, ?, ?, ?)',
-    [id, threadId, question, 'running', startedAt]
+    'INSERT INTO investigations (id, thread_id, user_id, question, status, started_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, threadId, userId, question, 'running', startedAt]
   );
   logger.info({ id, threadId, question }, 'Investigation created');
   return { id, startedAt };
@@ -34,8 +34,11 @@ export async function finalizeInvestigation(investigationId, { status, answer, e
   logger.info({ id: investigationId, status }, 'Investigation finalized');
 }
 
-export async function getInvestigation(id) {
-  const rows = await query('SELECT * FROM investigations WHERE id = ?', [id]);
+export async function getInvestigation(id, userId = null) {
+  const rows = await query(
+    'SELECT * FROM investigations WHERE id = ?' + (userId ? ' AND user_id = ?' : ''),
+    userId ? [id, userId] : [id]
+  );
   if (rows.length === 0) return null;
   const investigation = rows[0];
   const steps = await query(
@@ -45,8 +48,8 @@ export async function getInvestigation(id) {
   return { ...investigation, steps };
 }
 
-export async function listInvestigations() {
-  return query('SELECT * FROM investigations ORDER BY created_at DESC');
+export async function listInvestigations(userId) {
+  return query('SELECT * FROM investigations WHERE user_id = ? ORDER BY created_at DESC', [userId]);
 }
 
 export async function failOrphanedInvestigations() {

@@ -2,6 +2,16 @@ const POLL_INTERVAL_MS = 2000;
 const NEAR_BOTTOM_THRESHOLD_PX = 80;
 
 const els = {
+  appLayout: document.getElementById('app-layout'),
+  authView: document.getElementById('auth-view'),
+  authForm: document.getElementById('auth-form'),
+  authEmail: document.getElementById('auth-email'),
+  authPassword: document.getElementById('auth-password'),
+  authSubmit: document.getElementById('auth-submit'),
+  authError: document.getElementById('auth-error'),
+  authSwitch: document.getElementById('auth-switch'),
+  authToggleText: document.getElementById('auth-toggle-text'),
+  logoutBtn: document.getElementById('logout-btn'),
   threadList: document.getElementById('thread-list'),
   newThreadBtn: document.getElementById('new-thread-btn'),
   messages: document.getElementById('messages'),
@@ -43,8 +53,77 @@ async function api(path, options = {}) {
     ...options,
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok && res.status !== 409) throw new Error(body.error || `Request failed (${res.status})`);
+  if (!res.ok && res.status !== 409) {
+    if (res.status === 401 && !path.startsWith('/auth/') && els.authView.classList.contains('hidden')) {
+      sessionExpired();
+    }
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
   return { ok: res.ok, status: res.status, body };
+}
+
+/* ---------- Authentication ---------- */
+
+let authMode = 'login';
+
+function sessionExpired() {
+  stopPolling();
+  showAuthView();
+}
+
+function showAuthView() {
+  els.appLayout.classList.add('hidden');
+  els.authView.classList.remove('hidden');
+  els.authPassword.value = '';
+  els.authError.textContent = '';
+}
+
+function enterApp() {
+  els.authView.classList.add('hidden');
+  els.appLayout.classList.remove('hidden');
+  refreshThreads();
+  cacheConnections();
+  newThread();
+}
+
+async function initSession() {
+  try {
+    await api('/auth/me');
+    enterApp();
+  } catch {
+    showAuthView();
+  }
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  els.authSubmit.textContent = mode === 'login' ? 'Sign in' : 'Create account';
+  els.authToggleText.textContent = mode === 'login' ? 'No account?' : 'Already have an account?';
+  els.authSwitch.textContent = mode === 'login' ? 'Create one' : 'Sign in';
+  els.authError.textContent = '';
+}
+
+async function submitAuth(event) {
+  event.preventDefault();
+  const path = authMode === 'login' ? '/auth/login' : '/auth/register';
+  if (authMode === 'register') {
+    els.authPassword.setAttribute('autocomplete', 'new-password');
+  }
+  els.authSubmit.disabled = true;
+  try {
+    await api(path, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: els.authEmail.value.trim(),
+        password: els.authPassword.value,
+      }),
+    });
+    enterApp();
+  } catch (err) {
+    els.authError.textContent = err.message;
+  } finally {
+    els.authSubmit.disabled = false;
+  }
 }
 
 function escapeHtml(text) {
@@ -638,9 +717,18 @@ els.wizardBack.addEventListener('click', () => {
   showWizardStep('connection');
 });
 els.addConnectionForm.addEventListener('submit', submitConnection);
+els.logoutBtn.addEventListener('click', async () => {
+  try {
+    await api('/auth/logout', { method: 'POST' });
+  } catch { /* clear locally regardless */ }
+  sessionExpired();
+});
+els.authForm.addEventListener('submit', submitAuth);
+els.authSwitch.addEventListener('click', (e) => {
+  e.preventDefault();
+  setAuthMode(authMode === 'login' ? 'register' : 'login');
+});
 
 checkHealth();
 setInterval(checkHealth, 30000);
-refreshThreads();
-cacheConnections();
-newThread();
+initSession();
