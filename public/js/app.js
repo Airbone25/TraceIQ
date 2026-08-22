@@ -140,7 +140,7 @@ function renderSidebar() {
     li.className = 'thread-item' + (t.id === state.activeThreadId ? ' active' : '');
     li.innerHTML = `
       <span class="status-dot ${t.latest_status || 'queued'}"></span>
-      <span class="thread-title">${escapeHtml(t.title)}</span>
+      <span class="thread-title">${escapeHtml(t.title)}${t.target_database ? ` <span class="thread-db">${escapeHtml(t.target_database)}</span>` : ''}</span>
       <button class="thread-delete-btn" title="Delete investigation">&#128465;</button>`;
     li.addEventListener('click', () => openThread(t.id));
     li.querySelector('.thread-delete-btn').addEventListener('click', (e) => {
@@ -300,9 +300,9 @@ function renderThread(detail) {
   const isNewThread = state.renderedThreadId !== state.activeThreadId;
   const reachedTerminal = state.lastRunStatus === 'running' && run && run.status !== 'running';
 
-  if (detail.target_database) {
-    els.input.placeholder = `Ask about ${detail.target_database}...`;
-  }
+  els.input.placeholder = detail.target_database
+    ? `Ask about ${detail.target_database}...`
+    : 'Ask a question about your database...';
   updateTargetBadge();
 
   if (isNewThread || reachedTerminal || !run || run.status !== 'running') {
@@ -319,6 +319,11 @@ function renderThread(detail) {
 async function openThread(threadId) {
   stopPolling();
   state.activeThreadId = threadId;
+  state.detail = null;
+  state.pendingTarget = null;
+  state.draftQuestion = null;
+  els.targetBadge.classList.add('hidden');
+  els.input.placeholder = 'Ask a question about your database...';
   renderSidebar();
   await pollOnce();
   startPolling();

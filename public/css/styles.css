@@ -88,6 +88,20 @@ body {
 .thread-item.active { background: var(--bg-composer); }
 
 .thread-title { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.thread-db {
+  display: inline-block;
+  font-size: 10.5px;
+  color: var(--accent);
+  background: rgba(16, 163, 127, 0.08);
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .thread-delete-btn {
   background: transparent;

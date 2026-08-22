@@ -35,7 +35,7 @@ export async function getMessages(threadId) {
 
 export async function listThreads() {
   return query(`
-    SELECT t.id, t.title, t.created_at, t.updated_at,
+    SELECT t.id, t.title, t.target_database, t.connection_id, t.created_at, t.updated_at,
       (SELECT status FROM investigations i WHERE i.thread_id = t.id ORDER BY i.started_at DESC LIMIT 1) AS latest_status,
       (SELECT COUNT(*) FROM investigation_messages m WHERE m.thread_id = t.id) AS message_count
     FROM investigation_threads t
