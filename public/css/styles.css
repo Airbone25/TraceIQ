@@ -254,39 +254,42 @@ body {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-/* ---------- Target database bar ---------- */
-.target-bar {
+/* ---------- Composer target badge ---------- */
+.composer-wrap {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 8px 24px;
+  gap: 6px;
+}
+.target-badge {
   max-width: 800px;
-  margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
-}
-.target-label { color: var(--text-muted); font-size: 13px; white-space: nowrap; }
-.target-bar select {
-  background: var(--bg-composer);
-  color: var(--text);
-  border: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--accent);
+  background: rgba(16, 163, 127, 0.08);
+  border: 1px solid rgba(16, 163, 127, 0.25);
   border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 13px;
-  max-width: 220px;
+  padding: 5px 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.target-badge .badge-label {
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+
+/* ---------- New-chat wizard ---------- */
 .link-btn {
   background: none;
   border: none;
   color: var(--accent);
   cursor: pointer;
   font-size: 13px;
-  margin-left: auto;
   padding: 4px;
 }
 .link-btn:hover { text-decoration: underline; }
-
-/* ---------- Connections modal ---------- */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -318,7 +321,8 @@ body {
   border-radius: 6px;
 }
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
-.connections-list { list-style: none; margin: 0 0 16px; padding: 0; }
+
+.connections-list { list-style: none; margin: 0 0 10px; padding: 0; }
 .conn-item {
   display: flex;
   justify-content: space-between;
@@ -328,10 +332,53 @@ body {
   background: var(--bg-composer);
   margin-bottom: 8px;
 }
+.conn-item.clickable { cursor: pointer; }
+.conn-item.clickable:hover { background: var(--bg-hover); outline: 1px solid var(--border); }
 .conn-info { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
 .conn-info span { color: var(--text-muted); font-size: 12px; }
+.conn-actions { display: flex; align-items: center; gap: 2px; }
+.chevron { color: var(--text-muted); font-size: 20px; line-height: 1; }
 .conn-empty { color: var(--text-muted); font-size: 13px; padding: 8px 4px; list-style: none; }
+.primary-btn {
+  background: var(--accent);
+  border: none;
+  color: white;
+  border-radius: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.primary-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.primary-btn:disabled { opacity: 0.5; cursor: default; }
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 0;
+  margin-bottom: 10px;
+}
+.back-btn:hover { color: var(--text); }
+
+.database-list { list-style: none; margin: 0; padding: 0; }
+.db-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.db-item:hover { background: var(--bg-hover); }
+.db-icon { font-size: 15px; }
+.db-name { font-size: 14px; flex: 1; }
+.db-empty { color: var(--text-muted); font-size: 13px; padding: 8px 4px; list-style: none; }
+
 .add-connection-form { display: flex; flex-direction: column; gap: 10px; }
+.add-connection-form.hidden { display: none; }
+#toggle-add-connection.hidden { display: none; }
 .add-connection-form input {
   background: var(--bg-composer);
   border: 1px solid var(--border);

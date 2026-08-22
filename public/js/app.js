@@ -9,13 +9,17 @@ const els = {
   input: document.getElementById('question-input'),
   sendBtn: document.getElementById('send-btn'),
   healthDot: document.getElementById('health-dot'),
-  connectionSelect: document.getElementById('connection-select'),
-  databaseSelect: document.getElementById('database-select'),
-  manageConnectionsBtn: document.getElementById('manage-connections-btn'),
-  connectionsModal: document.getElementById('connections-modal'),
-  closeConnectionsModal: document.getElementById('close-connections-modal'),
+  targetBadge: document.getElementById('target-badge'),
+  newChatModal: document.getElementById('new-chat-modal'),
+  wizardTitle: document.getElementById('wizard-title'),
+  closeNewChatModal: document.getElementById('close-new-chat-modal'),
+  wizardStepConnection: document.getElementById('wizard-step-connection'),
+  wizardStepDatabase: document.getElementById('wizard-step-database'),
   connectionsList: document.getElementById('connections-list'),
+  toggleAddConnection: document.getElementById('toggle-add-connection'),
   addConnectionForm: document.getElementById('add-connection-form'),
+  wizardBack: document.getElementById('wizard-back'),
+  databaseList: document.getElementById('database-list'),
 };
 
 let state = {
@@ -27,7 +31,10 @@ let state = {
   renderedMessageCount: 0,
   renderedStepCount: 0,
   lastRunStatus: null,
-  target: { connectionId: '', database: '' },
+  pendingTarget: null,
+  draftQuestion: null,
+  wizardConnectionId: null,
+  connectionsCache: [],
 };
 
 async function api(path, options = {}) {
@@ -296,6 +303,7 @@ function renderThread(detail) {
   if (detail.target_database) {
     els.input.placeholder = `Ask about ${detail.target_database}...`;
   }
+  updateTargetBadge();
 
   if (isNewThread || reachedTerminal || !run || run.status !== 'running') {
     fullRender(detail);
@@ -368,11 +376,15 @@ function newThread() {
   state.detail = null;
   state.renderedThreadId = null;
   state.lastRunStatus = null;
+  state.pendingTarget = null;
+  state.draftQuestion = null;
   els.messages.innerHTML = EMPTY_STATE_HTML;
   bindExampleButtons();
   renderSidebar();
   setComposerEnabled(true);
+  updateTargetBadge();
   els.input.placeholder = 'Ask a question about your database...';
+  els.input.value = '';
   els.input.focus();
 }
 
@@ -381,15 +393,21 @@ async function submitQuestion(event) {
   const question = els.input.value.trim();
   if (!question) return;
 
+  if (!state.activeThreadId && !state.pendingTarget) {
+    state.draftQuestion = question;
+    openNewChatWizard();
+    return;
+  }
+
   els.input.value = '';
   els.input.style.height = 'auto';
   setComposerEnabled(false);
 
   try {
     const payload = { question };
-    if (!state.activeThreadId && state.target.connectionId && state.target.database) {
-      payload.connectionId = state.target.connectionId;
-      payload.database = state.target.database;
+    if (!state.activeThreadId && state.pendingTarget) {
+      payload.connectionId = state.pendingTarget.connectionId;
+      payload.database = state.pendingTarget.database;
     }
     const path = state.activeThreadId
       ? `/threads/${state.activeThreadId}/messages`
@@ -399,6 +417,7 @@ async function submitQuestion(event) {
       body: JSON.stringify(payload),
     });
     state.activeThreadId = body.threadId;
+    state.pendingTarget = null;
     await refreshThreads();
     await pollOnce();
     startPolling();
@@ -425,85 +444,86 @@ async function checkHealth() {
   }
 }
 
-/* ---------- Target database selection ---------- */
+/* ---------- New-chat target wizard ---------- */
 
-async function loadConnections() {
+function updateTargetBadge() {
+  let text = null;
+  if (state.activeThreadId && state.detail?.target_database) {
+    const conn = state.connectionsCache.find(c => c.id === state.detail.connection_id);
+    text = conn ? `${state.detail.target_database} · ${conn.name}` : state.detail.target_database;
+  } else if (!state.activeThreadId && state.pendingTarget) {
+    const conn = state.connectionsCache.find(c => c.id === state.pendingTarget.connectionId);
+    text = conn ? `${state.pendingTarget.database} · ${conn.name}` : state.pendingTarget.database;
+  }
+  if (text) {
+    els.targetBadge.innerHTML = `<span class="badge-label">Investigating</span> ${escapeHtml(text)}`;
+    els.targetBadge.classList.remove('hidden');
+  } else {
+    els.targetBadge.classList.add('hidden');
+  }
+}
+
+async function cacheConnections() {
   try {
     const { body } = await api('/connections');
-    const current = els.connectionSelect.value;
-    const options = ['<option value="">Default TraceIQ database</option>']
-      .concat(body.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${escapeHtml(c.host)})</option>`));
-    els.connectionSelect.innerHTML = options.join('');
-    if ([...els.connectionSelect.options].some(o => o.value === current)) {
-      els.connectionSelect.value = current;
-    } else {
-      state.target = { connectionId: '', database: '' };
-      els.databaseSelect.disabled = true;
-      els.databaseSelect.innerHTML = '<option value="">—</option>';
-    }
-  } catch { /* health dot already signals API issues */ }
+    state.connectionsCache = body;
+  } catch { /* badge falls back to database-only label */ }
 }
 
-async function onConnectionChange() {
-  state.target = { connectionId: els.connectionSelect.value, database: '' };
-  if (!state.target.connectionId) {
-    els.databaseSelect.disabled = true;
-    els.databaseSelect.innerHTML = '<option value="">—</option>';
-    return;
-  }
-  els.databaseSelect.disabled = true;
-  els.databaseSelect.innerHTML = '<option value="">Loading…</option>';
-  try {
-    const { body } = await api(`/connections/${encodeURIComponent(state.target.connectionId)}/databases`);
-    const dbs = body.databases || [];
-    els.databaseSelect.innerHTML = dbs.length
-      ? dbs.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('')
-      : '<option value="">No databases visible</option>';
-    els.databaseSelect.disabled = false;
-    if (dbs.length) {
-      els.databaseSelect.value = dbs[0];
-      state.target.database = dbs[0];
-    }
-  } catch (err) {
-    els.databaseSelect.innerHTML = `<option value="">${escapeHtml(err.message)}</option>`;
-  }
+function showWizardStep(step) {
+  els.wizardStepConnection.classList.toggle('hidden', step !== 'connection');
+  els.wizardStepDatabase.classList.toggle('hidden', step !== 'database');
+  els.wizardTitle.textContent = step === 'connection'
+    ? 'Choose a MySQL server'
+    : `Choose a database on “${wizardConnectionName()}”`;
 }
 
-/* ---------- Connections modal ---------- */
-
-function openConnectionsModal() {
-  els.connectionsModal.classList.remove('hidden');
-  renderConnectionsList();
+function wizardConnectionName() {
+  return state.connectionsCache.find(c => c.id === state.wizardConnectionId)?.name || 'server';
 }
 
-function closeConnectionsModal() {
-  els.connectionsModal.classList.add('hidden');
+function openNewChatWizard() {
+  els.addConnectionForm.classList.add('hidden');
+  els.toggleAddConnection.classList.remove('hidden');
+  state.wizardConnectionId = null;
+  showWizardStep('connection');
+  els.newChatModal.classList.remove('hidden');
+  renderWizardConnections();
 }
 
-async function renderConnectionsList() {
+function closeNewChatWizard() {
+  els.newChatModal.classList.add('hidden');
+}
+
+async function renderWizardConnections() {
   els.connectionsList.innerHTML = '<li class="conn-empty">Loading…</li>';
   try {
-    const { body } = await api('/connections');
-    if (!body.length) {
-      els.connectionsList.innerHTML = '<li class="conn-empty">No connections yet. Add a MySQL server below.</li>';
+    await cacheConnections();
+    if (!state.connectionsCache.length) {
+      els.connectionsList.innerHTML = '<li class="conn-empty">No MySQL servers yet. Add one below to get started.</li>';
       return;
     }
     els.connectionsList.innerHTML = '';
-    for (const c of body) {
+    for (const c of state.connectionsCache) {
       const li = document.createElement('li');
-      li.className = 'conn-item';
+      li.className = 'conn-item clickable';
       li.innerHTML = `
         <div class="conn-info">
           <strong>${escapeHtml(c.name)}</strong>
           <span>${escapeHtml(c.user)}@${escapeHtml(c.host)}:${c.port}</span>
         </div>
-        <button type="button" class="icon-btn conn-delete" data-id="${escapeHtml(c.id)}" title="Delete connection">&times;</button>`;
-      li.querySelector('.conn-delete').addEventListener('click', async () => {
+        <div class="conn-actions">
+          <button type="button" class="icon-btn conn-delete" title="Delete connection">&times;</button>
+          <span class="chevron">&#8250;</span>
+        </div>`;
+      li.addEventListener('click', () => selectWizardConnection(c.id));
+      li.querySelector('.conn-delete').addEventListener('click', async (e) => {
+        e.stopPropagation();
         if (!confirm(`Delete connection "${c.name}"? Existing chats bound to it will fail.`)) return;
         try {
           await api(`/connections/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
-          await renderConnectionsList();
-          await loadConnections();
+          await renderWizardConnections();
+          updateTargetBadge();
         } catch (err) {
           alert(err.message);
         }
@@ -512,6 +532,46 @@ async function renderConnectionsList() {
     }
   } catch (err) {
     els.connectionsList.innerHTML = `<li class="conn-empty">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+async function selectWizardConnection(connectionId) {
+  state.wizardConnectionId = connectionId;
+  showWizardStep('database');
+  els.databaseList.innerHTML = '<li class="db-empty">Loading databases…</li>';
+  try {
+    const { body } = await api(`/connections/${encodeURIComponent(connectionId)}/databases`);
+    const dbs = body.databases || [];
+    if (!dbs.length) {
+      els.databaseList.innerHTML = '<li class="db-empty">No databases visible for this user.</li>';
+      return;
+    }
+    els.databaseList.innerHTML = '';
+    for (const db of dbs) {
+      const li = document.createElement('li');
+      li.className = 'db-item';
+      li.innerHTML = `
+        <span class="db-icon">&#128451;</span>
+        <span class="db-name">${escapeHtml(db)}</span>
+        <span class="chevron">&#8250;</span>`;
+      li.addEventListener('click', () => chooseDatabase(db));
+      els.databaseList.appendChild(li);
+    }
+  } catch (err) {
+    els.databaseList.innerHTML = `<li class="db-empty">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+function chooseDatabase(database) {
+  state.pendingTarget = { connectionId: state.wizardConnectionId, database };
+  closeNewChatWizard();
+  updateTargetBadge();
+  els.input.placeholder = `Ask about ${database}...`;
+  els.input.focus();
+  if (state.draftQuestion) {
+    els.input.value = state.draftQuestion;
+    state.draftQuestion = null;
+    els.form.dispatchEvent(new Event('submit'));
   }
 }
 
@@ -528,11 +588,13 @@ async function submitConnection(event) {
   btn.disabled = true;
   btn.textContent = 'Testing connection…';
   try {
-    await api('/connections', { method: 'POST', body: JSON.stringify(payload) });
+    const { body } = await api('/connections', { method: 'POST', body: JSON.stringify(payload) });
     els.addConnectionForm.reset();
     document.getElementById('conn-port').value = '3306';
-    await renderConnectionsList();
-    await loadConnections();
+    els.addConnectionForm.classList.add('hidden');
+    els.toggleAddConnection.classList.remove('hidden');
+    await renderWizardConnections();
+    await selectWizardConnection(body.id);
   } catch (err) {
     alert(err.message);
   } finally {
@@ -552,19 +614,28 @@ function bindExampleButtons() {
   });
 }
 
-els.newThreadBtn.addEventListener('click', newThread);
+els.newThreadBtn.addEventListener('click', () => {
+  newThread();
+  openNewChatWizard();
+});
 els.form.addEventListener('submit', submitQuestion);
 els.input.addEventListener('input', autoGrow);
-els.connectionSelect.addEventListener('change', onConnectionChange);
-els.manageConnectionsBtn.addEventListener('click', openConnectionsModal);
-els.closeConnectionsModal.addEventListener('click', closeConnectionsModal);
-els.connectionsModal.addEventListener('click', (e) => {
-  if (e.target === els.connectionsModal) closeConnectionsModal();
+els.closeNewChatModal.addEventListener('click', closeNewChatWizard);
+els.newChatModal.addEventListener('click', (e) => {
+  if (e.target === els.newChatModal) closeNewChatWizard();
+});
+els.toggleAddConnection.addEventListener('click', () => {
+  els.addConnectionForm.classList.toggle('hidden');
+  els.toggleAddConnection.classList.toggle('hidden');
+});
+els.wizardBack.addEventListener('click', () => {
+  state.wizardConnectionId = null;
+  showWizardStep('connection');
 });
 els.addConnectionForm.addEventListener('submit', submitConnection);
 
 checkHealth();
 setInterval(checkHealth, 30000);
 refreshThreads();
-loadConnections();
+cacheConnections();
 newThread();

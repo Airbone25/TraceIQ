@@ -30,44 +30,45 @@
         </div>
       </div>
 
-      <div id="target-bar" class="target-bar">
-        <span class="target-label">Investigate:</span>
-        <select id="connection-select" aria-label="Connection">
-          <option value="">Default TraceIQ database</option>
-        </select>
-        <select id="database-select" aria-label="Database" disabled>
-          <option value="">—</option>
-        </select>
-        <button type="button" id="manage-connections-btn" class="link-btn">Connections</button>
+      <div id="composer-wrap" class="composer-wrap">
+        <div id="target-badge" class="target-badge hidden"></div>
+        <form id="ask-form" class="composer">
+          <textarea id="question-input" placeholder="Ask a question about your database..." rows="1" disabled></textarea>
+          <button type="submit" id="send-btn" disabled aria-label="Send">&#10148;</button>
+        </form>
       </div>
-
-      <form id="ask-form" class="composer">
-        <textarea id="question-input" placeholder="Ask a question about your database..." rows="1" disabled></textarea>
-        <button type="submit" id="send-btn" disabled aria-label="Send">&#10148;</button>
-      </form>
     </main>
   </div>
 
-  <div id="connections-modal" class="modal-backdrop hidden">
+  <div id="new-chat-modal" class="modal-backdrop hidden">
     <div class="modal">
       <div class="modal-header">
-        <h3>MySQL connections</h3>
-        <button type="button" id="close-connections-modal" class="icon-btn" aria-label="Close">&times;</button>
+        <h3 id="wizard-title">Choose a MySQL server</h3>
+        <button type="button" id="close-new-chat-modal" class="icon-btn" aria-label="Close">&times;</button>
       </div>
-      <ul id="connections-list" class="connections-list"></ul>
-      <form id="add-connection-form" class="add-connection-form">
-        <input id="conn-name" placeholder="Label (e.g. Production)" required maxlength="100">
-        <div class="conn-row">
-          <input id="conn-host" placeholder="Host" required maxlength="255">
-          <input id="conn-port" type="number" value="3306" min="1" max="65535">
-        </div>
-        <div class="conn-row">
-          <input id="conn-user" placeholder="MySQL user" required maxlength="120">
-          <input id="conn-password" type="password" placeholder="Password">
-        </div>
-        <button type="submit" id="add-connection-submit" class="new-thread-btn">Connect server</button>
-        <p class="conn-note">Credentials are encrypted (AES-256-GCM) before storage. Read-only MySQL accounts are strongly recommended.</p>
-      </form>
+
+      <section id="wizard-step-connection">
+        <ul id="connections-list" class="connections-list"></ul>
+        <button type="button" id="toggle-add-connection" class="link-btn">+ Add new connection</button>
+        <form id="add-connection-form" class="add-connection-form hidden">
+          <input id="conn-name" placeholder="Label (e.g. Production)" required maxlength="100">
+          <div class="conn-row">
+            <input id="conn-host" placeholder="Host" required maxlength="255">
+            <input id="conn-port" type="number" value="3306" min="1" max="65535">
+          </div>
+          <div class="conn-row">
+            <input id="conn-user" placeholder="MySQL user" required maxlength="120">
+            <input id="conn-password" type="password" placeholder="Password">
+          </div>
+          <button type="submit" id="add-connection-submit" class="primary-btn">Connect server</button>
+          <p class="conn-note">Credentials are encrypted (AES-256-GCM) before storage. Read-only MySQL accounts are strongly recommended.</p>
+        </form>
+      </section>
+
+      <section id="wizard-step-database" class="hidden">
+        <button type="button" id="wizard-back" class="back-btn">&larr; Change server</button>
+        <ul id="database-list" class="database-list"></ul>
+      </section>
     </div>
   </div>
 
