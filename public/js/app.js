@@ -37,6 +37,7 @@ let state = {
   activeThreadId: null,
   detail: null,
   pollTimer: null,
+  viewGen: 0,
   renderedThreadId: null,
   renderedMessageCount: 0,
   renderedStepCount: 0,
@@ -397,6 +398,7 @@ function renderThread(detail) {
 
 async function openThread(threadId) {
   stopPolling();
+  state.viewGen++;
   state.activeThreadId = threadId;
   state.detail = null;
   state.pendingTarget = null;
@@ -409,9 +411,11 @@ async function openThread(threadId) {
 }
 
 async function pollOnce() {
+  const gen = state.viewGen;
   if (!state.activeThreadId) return;
   try {
     const { body } = await api(`/threads/${state.activeThreadId}`);
+    if (gen !== state.viewGen) return;
     state.detail = body;
     renderThread(body);
 
@@ -420,6 +424,7 @@ async function pollOnce() {
       refreshThreads();
     }
   } catch (err) {
+    if (gen !== state.viewGen) return;
     appendMessage('assistant', `Failed to load thread: ${err.message}`, { failed: true });
     scrollToBottomNow();
     stopPolling();
@@ -456,6 +461,7 @@ const EMPTY_STATE_HTML = `
 
 function newThread() {
   stopPolling();
+  state.viewGen++;
   state.activeThreadId = null;
   state.detail = null;
   state.renderedThreadId = null;
@@ -477,10 +483,14 @@ async function submitQuestion(event) {
   const question = els.input.value.trim();
   if (!question) return;
 
-  if (!state.activeThreadId && !state.pendingTarget) {
-    state.draftQuestion = question;
-    openNewChatWizard();
-    return;
+  if (!state.activeThreadId) {
+    const target = state.pendingTarget;
+    if (!target || !target.connectionId || !target.database) {
+      state.pendingTarget = null;
+      state.draftQuestion = question;
+      openNewChatWizard();
+      return;
+    }
   }
 
   els.input.value = '';
@@ -489,7 +499,7 @@ async function submitQuestion(event) {
 
   try {
     const payload = { question };
-    if (!state.activeThreadId && state.pendingTarget) {
+    if (!state.activeThreadId && state.pendingTarget?.connectionId && state.pendingTarget?.database) {
       payload.connectionId = state.pendingTarget.connectionId;
       payload.database = state.pendingTarget.database;
     }
@@ -647,6 +657,7 @@ async function selectWizardConnection(connectionId) {
 }
 
 function chooseDatabase(database) {
+  if (!state.wizardConnectionId || !database) return;
   state.pendingTarget = { connectionId: state.wizardConnectionId, database };
   closeNewChatWizard();
   updateTargetBadge();

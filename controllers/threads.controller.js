@@ -33,7 +33,10 @@ export async function createThreadHandler(req, res) {
     connectionId = req.body.connectionId;
     database = req.body.database;
     if (!connectionId || !validateDatabaseName(database)) {
-      return res.status(400).json({ error: 'connectionId and a valid database name are required to target an external database' });
+      return res.status(400).json({
+        error: 'connectionId and a valid database name are required to target an external database',
+        received: { connectionId: connectionId ?? null, database: database ?? null },
+      });
     }
     try {
       const connection = await getConnectionRow(connectionId, req.userId);
