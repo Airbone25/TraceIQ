@@ -268,6 +268,8 @@ body {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
+.hidden { display: none !important; }
+
 /* ---------- Composer target badge ---------- */
 .composer-wrap {
   display: flex;
