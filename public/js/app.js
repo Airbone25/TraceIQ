@@ -40,6 +40,7 @@ let state = {
   viewGen: 0,
   renderedThreadId: null,
   renderedMessageCount: 0,
+  renderedStepCount: 0,
   lastRunStatus: null,
   pendingTarget: null,
   draftQuestion: null,
@@ -263,6 +264,7 @@ function messagesInner() {
 function clearMessages() {
   els.messages.innerHTML = '<div class="messages-inner" id="messages-inner"></div>';
   state.renderedMessageCount = 0;
+  state.renderedStepCount = 0;
 }
 
 function buildMessageBubble(role, content, meta) {
@@ -291,7 +293,7 @@ function appendMessage(role, content, meta) {
   state.renderedMessageCount++;
 }
 
-/* ---------- Progress card ---------- */
+/* ---------- Progress card (live, non-persistent) ---------- */
 
 function ensureProgressCard() {
   let card = document.getElementById('progress-card');
@@ -302,14 +304,115 @@ function ensureProgressCard() {
     card.innerHTML = `
       <div class="progress-card">
         <div class="progress-header"><span class="spinner"></span> <span class="progress-label">Investigating...</span></div>
+        <div class="progress-steps"></div>
       </div>`;
     messagesInner().appendChild(card);
+    state.renderedStepCount = 0;
   }
   return card;
 }
 
+const STEP_META = {
+  get_schema: { label: 'Inspect schema', icon: '▤' },
+  get_overview: { label: 'Database overview', icon: '☰' },
+  execute_sql: { label: 'SQL query', icon: '⛃' },
+};
+
+function renderSampleRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return '<p class="step-empty">No rows returned.</p>';
+  }
+  const sampled = rows.slice(0, 20);
+  const columns = Object.keys(sampled[0]);
+  const th = columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+  const tr = sampled
+    .map(r => `<tr>${columns.map(c => `<td>${escapeHtml(formatCell(r[c]))}</td>`).join('')}</tr>`)
+    .join('');
+  const more = rows.length > sampled.length ? `<p class="step-more">… showing ${sampled.length} of ${rows.length} rows</p>` : '';
+  return `<div class="table-wrap"><table class="answer-table"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>${more}`;
+}
+
+function formatCell(value) {
+  if (value == null) return 'NULL';
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function buildStepCard(step) {
+  const card = document.createElement('div');
+  card.className = 'step-card';
+  const toolName = step.tool_name;
+  const meta = STEP_META[toolName] || { label: toolName, icon: '•' };
+  const sql = step.tool_input?.sql;
+
+  let summary = '';
+  let details = '';
+
+  if (toolName === 'execute_sql') {
+    const out = step.tool_output || {};
+    const rowCount = out.rowCount ?? (Array.isArray(out.rows) ? out.rows.length : null);
+    const ok = out.success !== false;
+    summary = ok
+      ? `${rowCount == null ? 'query' : rowCount + ' row' + (rowCount === 1 ? '' : 's')}${out.truncated ? ' (truncated)' : ''}${out.duration ? ' · ' + formatDuration(out.duration) : ''}`
+      : 'failed';
+    details = `<div class="step-sql">${escapeHtml(sql || '')}</div>`;
+    if (Array.isArray(out.rows)) {
+      details += renderSampleRows(out.rows);
+    } else if (out.error) {
+      details += `<p class="step-empty">Error: ${escapeHtml(out.error)}</p>`;
+    }
+    card.classList.add(ok ? 'step-ok' : 'step-err');
+  } else if (toolName === 'get_schema') {
+    const out = step.tool_output || {};
+    const tables = Array.isArray(out.tables) ? out.tables : [];
+    summary = `${tables.length} table${tables.length === 1 ? '' : 's'}`;
+    details = Array.isArray(out.summary)
+      ? `<ul class="step-tables">${out.summary.slice(0, 30).map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`
+      : '';
+  } else if (toolName === 'get_overview') {
+    const out = step.tool_output || {};
+    const tables = Array.isArray(out.tables) ? out.tables : [];
+    const ranges = Array.isArray(out.dateRanges) ? out.dateRanges : [];
+    summary = `${tables.length} table${tables.length === 1 ? '' : 's'}, ${ranges.length} date range${ranges.length === 1 ? '' : 's'}`;
+    const tableLines = tables.map(t => `${escapeHtml(t.name)} (${t.rowCount} rows)`).join('<br>');
+    const rangeLines = ranges.slice(0, 20).map(r => `${escapeHtml(r.table)}.${escapeHtml(r.column)}: ${escapeHtml(String(r.min))} → ${escapeHtml(String(r.max))}`).join('<br>');
+    details = `<p class="step-sub">Tables</p>${tableLines || '<p class="step-empty">none</p>'}${ranges.length ? `<p class="step-sub">Time ranges</p>${rangeLines}` : ''}`;
+  } else {
+    summary = '';
+    details = `<pre class="step-sql">${escapeHtml(JSON.stringify(step.tool_output, null, 2))}</pre>`;
+  }
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'step-toggle';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.innerHTML = `<span class="step-caret">&#9654;</span><span class="step-icon">${meta.icon}</span><span class="step-name">${escapeHtml(meta.label)}</span><span class="step-summary">${escapeHtml(summary)}</span><span class="dur">${formatDuration(step.duration_ms)}</span>`;
+
+  const body = document.createElement('div');
+  body.className = 'step-body';
+  body.innerHTML = details;
+
+  toggle.addEventListener('click', () => {
+    const expanded = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', String(!expanded));
+    toggle.querySelector('.step-caret').textContent = !expanded ? '▼' : '▶';
+    body.classList.toggle('open', !expanded);
+  });
+
+  card.appendChild(toggle);
+  card.appendChild(body);
+  return card;
+}
+
 function updateProgressCard(steps) {
-  ensureProgressCard();
+  const card = ensureProgressCard();
+  const container = card.querySelector('.progress-steps');
+  for (let i = state.renderedStepCount; i < steps.length; i++) {
+    container.appendChild(buildStepCard(steps[i]));
+  }
+  state.renderedStepCount = steps.length;
+  card.querySelector('.progress-label').textContent = `Investigating... ${steps.length} step${steps.length === 1 ? '' : 's'}`;
 }
 
 /* ---------- Thread view / polling ---------- */

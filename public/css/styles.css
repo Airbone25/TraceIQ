@@ -222,6 +222,52 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---------- Live step cards ---------- */
+.progress-steps { margin-top: 8px; }
+.step-card { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; overflow: hidden; }
+.step-card:last-child { margin-bottom: 0; }
+.step-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-composer);
+  border: none;
+  color: var(--text);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12.5px;
+  text-align: left;
+}
+.step-toggle:hover { background: var(--bg-hover); }
+.step-caret { color: var(--text-muted); font-size: 10px; width: 12px; flex: none; }
+.step-icon { color: var(--accent); flex: none; }
+.step-name { font-weight: 600; flex: none; }
+.step-summary { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.step-toggle .dur { color: var(--text-dim); font-size: 11.5px; flex: none; }
+.step-card.step-err .step-name { color: var(--danger); }
+.step-card.step-err .step-icon { color: var(--danger); }
+.step-body { display: none; padding: 8px 10px; background: transparent; border-top: 1px solid var(--border); }
+.step-body.open { display: block; }
+.step-sql {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  margin-bottom: 8px;
+  overflow-x: auto;
+}
+.step-sub { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin: 8px 0 4px; }
+.step-empty { color: var(--text-muted); font-size: 12px; margin: 4px 0; }
+.step-more { color: var(--text-muted); font-size: 11.5px; margin: 6px 0 0; }
+.step-tables { margin: 4px 0 0; padding-left: 18px; color: var(--text); font-size: 12px; }
+.step-tables li { margin-bottom: 3px; }
+
 /* ---------- Composer ---------- */
 .composer {
   display: flex;
