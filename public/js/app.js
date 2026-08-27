@@ -293,163 +293,104 @@ function appendMessage(role, content, meta) {
   state.renderedMessageCount++;
 }
 
-/* ---------- Progress card ---------- */
+/* ---------- Investigation steps accordion ---------- */
 
-function ensureProgressCard() {
-  let card = document.getElementById('progress-card');
-  if (!card) {
-    card = document.createElement('div');
-    card.className = 'msg assistant';
-    card.id = 'progress-card';
-    card.innerHTML = `
-      <div class="progress-card">
-        <div class="progress-header"><span class="spinner"></span> <span class="progress-label">Investigating...</span></div>
-        <ul class="step-list" id="step-list"></ul>
-      </div>`;
-    messagesInner().appendChild(card);
-    state.renderedStepCount = 0;
-  }
-  return card;
-}
-
-const STEP_META = {
-  get_schema: { label: 'Inspect schema', icon: '▤' },
-  get_overview: { label: 'Database overview', icon: '☰' },
-  execute_sql: { label: 'SQL query', icon: '⛃' },
-};
-
-function stepLabel(toolName) {
-  const meta = STEP_META[toolName];
-  return meta ? meta.label : toolName;
-}
-
-function renderSampleRows(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return '<p class="step-empty">No rows returned.</p>';
-  }
-  const sampled = rows.slice(0, 20);
-  const columns = Object.keys(sampled[0]);
-  const th = columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
-  const tr = sampled
-    .map(r => `<tr>${columns.map(c => `<td>${escapeHtml(formatCell(r[c]))}</td>`).join('')}</tr>`)
-    .join('');
-  const more = rows.length > sampled.length ? `<p class="step-more">… showing ${sampled.length} of ${rows.length} rows</p>` : '';
-  return `<div class="table-wrap"><table class="answer-table"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>${more}`;
-}
-
-function formatCell(value) {
-  if (value == null) return 'NULL';
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
-function buildStepCard(step) {
-  const card = document.createElement('div');
-  card.className = 'step-card';
+function stepActionLine(step) {
   const toolName = step.tool_name;
-  const meta = STEP_META[toolName] || { label: toolName, icon: '•' };
-  const sql = step.tool_input?.sql;
-
-  let summary = '';
-  let details = '';
-
   if (toolName === 'execute_sql') {
     const out = step.tool_output || {};
-    const rowCount = out.rowCount ?? (Array.isArray(out.rows) ? out.rows.length : null);
     const ok = out.success !== false;
-    summary = ok
-      ? `${rowCount == null ? 'query' : rowCount + ' row' + (rowCount === 1 ? '' : 's')}${out.truncated ? ' (truncated)' : ''}${out.duration ? ' · ' + formatDuration(out.duration) : ''}`
-      : 'failed';
-    details = `<div class="step-sql">${escapeHtml(sql || '')}</div>`;
-    if (Array.isArray(out.rows)) {
-      details += renderSampleRows(out.rows);
-    } else if (out.error) {
-      details += `<p class="step-empty">Error: ${escapeHtml(out.error)}</p>`;
+    const rowCount = out.rowCount ?? (Array.isArray(out.rows) ? out.rows.length : null);
+    const countText = ok
+      ? (rowCount == null ? '' : ` (${rowCount} row${rowCount === 1 ? '' : 's'})`)
+      : ' (failed)';
+    return `Run SQL${countText}: ${step.tool_input?.sql || ''}`;
+  }
+  if (toolName === 'get_schema') {
+    return 'Inspected the database schema';
+  }
+  if (toolName === 'get_overview') {
+    const out = step.tool_output || {};
+    const n = Array.isArray(out.tables) ? out.tables.length : 0;
+    return `Reviewed database overview (${n} table${n === 1 ? '' : 's'})`;
+  }
+  return step.tool_name;
+}
+
+function ensureStepsAccordion() {
+  let accordion = document.getElementById('steps-accordion');
+  if (!accordion) {
+    accordion = document.createElement('div');
+    accordion.className = 'msg assistant';
+    accordion.id = 'steps-accordion';
+    accordion.innerHTML = `
+      <button type="button" class="steps-trigger" aria-expanded="false">
+        <span class="steps-caret">&#9654;</span>
+        <span class="steps-title">Investigation steps</span>
+        <span class="steps-count"></span>
+        <span class="steps-spinner hidden"></span>
+      </button>
+      <div class="steps-panel"></div>`;
+    const trigger = accordion.querySelector('.steps-trigger');
+    trigger.addEventListener('click', () => {
+      const expanded = trigger.getAttribute('aria-expanded') === 'true';
+      trigger.setAttribute('aria-expanded', String(!expanded));
+      accordion.querySelector('.steps-caret').textContent = !expanded ? '▼' : '▶';
+      accordion.querySelector('.steps-panel').classList.toggle('open', !expanded);
+    });
+    messagesInner().appendChild(accordion);
+  }
+  return accordion;
+}
+
+function renderSteps(accordion, steps) {
+  const panel = accordion.querySelector('.steps-panel');
+  const countEl = accordion.querySelector('.steps-count');
+  panel.innerHTML = '';
+  const ol = document.createElement('ol');
+  ol.className = 'steps-list';
+  for (const s of steps) {
+    const li = document.createElement('li');
+    const line = escapeHtml(stepActionLine(s));
+    const sql = s.tool_input?.sql;
+    if (sql) {
+      li.innerHTML = `<span class="steps-line">${line}</span><code class="steps-sql">${escapeHtml(sql)}</code>`;
+    } else {
+      li.textContent = line;
     }
-    card.classList.add(ok ? 'step-ok' : 'step-err');
-  } else if (toolName === 'get_schema') {
-    const out = step.tool_output || {};
-    const tables = Array.isArray(out.tables) ? out.tables : [];
-    summary = `${tables.length} table${tables.length === 1 ? '' : 's'}`;
-    details = Array.isArray(out.summary)
-      ? `<ul class="step-tables">${out.summary.slice(0, 30).map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`
-      : '';
-  } else if (toolName === 'get_overview') {
-    const out = step.tool_output || {};
-    const tables = Array.isArray(out.tables) ? out.tables : [];
-    const ranges = Array.isArray(out.dateRanges) ? out.dateRanges : [];
-    summary = `${tables.length} table${tables.length === 1 ? '' : 's'}, ${ranges.length} date range${ranges.length === 1 ? '' : 's'}`;
-    const tableLines = tables.map(t => `${escapeHtml(t.name)} (${t.rowCount} rows)`).join('<br>');
-    const rangeLines = ranges.slice(0, 20).map(r => `${escapeHtml(r.table)}.${escapeHtml(r.column)}: ${escapeHtml(String(r.min))} → ${escapeHtml(String(r.max))}`).join('<br>');
-    details = `<p class="step-sub">Tables</p>${tableLines || '<p class="step-empty">none</p>'}${ranges.length ? `<p class="step-sub">Time ranges</p>${rangeLines}` : ''}`;
-  } else {
-    summary = '';
-    details = `<pre class="step-sql">${escapeHtml(JSON.stringify(step.tool_output, null, 2))}</pre>`;
+    ol.appendChild(li);
   }
-
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'step-toggle';
-  toggle.setAttribute('aria-expanded', 'false');
-  toggle.innerHTML = `<span class="step-caret">&#9654;</span><span class="step-icon">${meta.icon}</span><span class="step-name">${escapeHtml(meta.label)}</span><span class="step-summary">${escapeHtml(summary)}</span><span class="dur">${formatDuration(step.duration_ms)}</span>`;
-
-  const body = document.createElement('div');
-  body.className = 'step-body';
-  body.innerHTML = details;
-
-  toggle.addEventListener('click', () => {
-    const expanded = toggle.getAttribute('aria-expanded') === 'true';
-    toggle.setAttribute('aria-expanded', String(!expanded));
-    toggle.querySelector('.step-caret').textContent = !expanded ? '▼' : '▶';
-    body.classList.toggle('open', !expanded);
-  });
-
-  card.appendChild(toggle);
-  card.appendChild(body);
-  return card;
+  panel.appendChild(ol);
+  countEl.textContent = steps.length ? `(${steps.length})` : '';
 }
 
-function ensureStepTimeline() {
-  let timeline = document.getElementById('step-timeline');
-  if (!timeline) {
-    timeline = document.createElement('div');
-    timeline.className = 'msg assistant';
-    timeline.id = 'step-timeline';
-    const inner = document.createElement('div');
-    inner.className = 'step-timeline';
-    timeline.appendChild(inner);
-    messagesInner().appendChild(timeline);
-  }
-  return timeline;
-}
-
-function appendSteps(steps, listEl) {
-  for (let i = state.renderedStepCount; i < steps.length; i++) {
-    listEl.appendChild(buildStepCard(steps[i]));
-  }
+function updateStepsLive(steps) {
+  const accordion = ensureStepsAccordion();
+  const countEl = accordion.querySelector('.steps-count');
+  const spinner = accordion.querySelector('.steps-spinner');
+  renderSteps(accordion, steps);
+  countEl.textContent = `(${steps.length})`;
+  spinner.classList.add('hidden');
   state.renderedStepCount = steps.length;
 }
 
-function updateProgressCard(steps) {
-  const card = ensureProgressCard();
-  const ul = card.querySelector('#step-list');
-  appendSteps(steps, ul);
-  card.querySelector('.progress-label').textContent = `Investigating... ${steps.length} step${steps.length === 1 ? '' : 's'}`;
+function showRunningSteps() {
+  const accordion = ensureStepsAccordion();
+  accordion.querySelector('.steps-spinner').classList.remove('hidden');
+  accordion.querySelector('.steps-panel').classList.add('open');
 }
 
 function renderTerminalSteps(detail) {
   const steps = detail.latestRunSteps || [];
   if (!steps.length) return;
-  const timeline = ensureStepTimeline();
-  const inner = timeline.querySelector('.step-timeline');
-  timeline.querySelector('.step-timeline-head')?.remove();
-  const head = document.createElement('div');
-  head.className = 'step-timeline-head';
-  head.innerHTML = `<span class="progress-label">Investigation steps</span><span class="steps-ref">${steps.length} step${steps.length === 1 ? '' : 's'}</span>`;
-  inner.prepend(head);
-  for (const s of steps) {
-    inner.appendChild(buildStepCard(s));
+  const accordion = ensureStepsAccordion();
+  accordion.querySelector('.steps-spinner').classList.add('hidden');
+  renderSteps(accordion, steps);
+
+  const inner = messagesInner();
+  const lastMsg = inner.querySelector('.msg:last-child');
+  if (lastMsg && lastMsg !== accordion) {
+    inner.insertBefore(accordion, lastMsg);
   }
 }
 
@@ -484,11 +425,12 @@ function fullRender(detail) {
   }
   const run = latestRun(detail);
   if (run && run.status === 'running') {
-    updateProgressCard(detail.latestRunSteps || []);
+    updateStepsLive(detail.latestRunSteps || []);
+    showRunningSteps();
     setComposerEnabled(false);
   } else {
-    renderTerminalAnswer(detail);
     renderTerminalSteps(detail);
+    renderTerminalAnswer(detail);
     setComposerEnabled(true);
   }
 }
@@ -497,7 +439,7 @@ function incrementalRender(detail) {
   for (let i = state.renderedMessageCount; i < detail.messages.length; i++) {
     appendMessage(detail.messages[i].role, detail.messages[i].content);
   }
-  updateProgressCard(detail.latestRunSteps || []);
+  updateStepsLive(detail.latestRunSteps || []);
   setComposerEnabled(false);
 }
 
