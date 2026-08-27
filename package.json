@@ -2,11 +2,15 @@
   "name": "traceiq",
   "version": "1.0.0",
   "description": "AI Database Investigation Agent",
-  "main": "src/server.js",
+  "author": "TraceIQ",
+  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "desktop": "electron electron/main.cjs",
+    "desktop:pack": "electron-builder --dir",
+    "desktop:dist": "electron-builder",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:setup": "node scripts/setup-db.js",
@@ -15,6 +19,63 @@
     "db:setup-readonly": "node scripts/setup-readonly-user.js",
     "benchmark": "node scripts/benchmark.js",
     "eval": "node scripts/eval.js"
+  },
+  "files": [
+    "electron/",
+    "src/",
+    "public/",
+    "routes/",
+    "controllers/",
+    "database/",
+    "config/",
+    "agent/",
+    "llm/",
+    "middleware/",
+    "scripts/",
+    "security/",
+    "services/",
+    "sql/",
+    "tools/",
+    "utils/"
+  ],
+  "build": {
+    "appId": "com.traceiq.desktop",
+    "productName": "TraceIQ",
+    "asar": false,
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "public/**/*",
+      "routes/**/*",
+      "controllers/**/*",
+      "database/**/*",
+      "config/**/*",
+      "agent/**/*",
+      "llm/**/*",
+      "middleware/**/*",
+      "scripts/**/*",
+      "security/**/*",
+      "services/**/*",
+      "sql/**/*",
+      "tools/**/*",
+      "utils/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "directories": {
+      "output": "release"
+    }
   },
   "keywords": [
     "ai",
@@ -35,6 +96,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "supertest": "^7.2.2",
     "vitest": "^3.0.9"
   }

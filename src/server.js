@@ -13,11 +13,12 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/api', routes);
 
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || '3001', 10);
+const HOST = process.env.HOST || '0.0.0.0';
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    logger.info({ port: PORT }, `TraceIQ server running on port ${PORT}`);
+  app.listen(PORT, HOST, () => {
+    logger.info({ host: HOST, port: PORT }, `TraceIQ server running on ${HOST}:${PORT}`);
     failOrphanedInvestigations().catch(err => {
       logger.error({ err: err.message }, 'Startup reconciliation failed');
     });
