@@ -30,6 +30,10 @@ const els = {
   addConnectionForm: document.getElementById('add-connection-form'),
   wizardBack: document.getElementById('wizard-back'),
   databaseList: document.getElementById('database-list'),
+  firstRunBanner: document.getElementById('first-run-banner'),
+  exploreSchemaToggle: document.getElementById('explore-schema-toggle'),
+  exploreSchemaCaret: document.getElementById('explore-schema-caret'),
+  exploreSchema: document.getElementById('explore-schema'),
 };
 
 let state = {
@@ -681,23 +685,39 @@ async function renderWizardConnections() {
   try {
     await cacheConnections();
     if (!state.connectionsCache.length) {
-      els.connectionsList.innerHTML = '<li class="conn-empty">No MySQL servers yet. Add one below to get started.</li>';
+      els.connectionsList.innerHTML = '';
+      els.firstRunBanner.classList.remove('hidden');
       return;
     }
+    els.firstRunBanner.classList.add('hidden');
+    let health = {};
+    try {
+      const { body } = await api('/connections/health');
+      for (const h of (body.connections || [])) health[h.id] = h.healthy;
+    } catch { /* indicators degrade gracefully */ }
+
     els.connectionsList.innerHTML = '';
     for (const c of state.connectionsCache) {
       const li = document.createElement('li');
       li.className = 'conn-item clickable';
+      const isHealthy = health[c.id];
+      const healthClass = isHealthy === undefined ? 'unknown' : (isHealthy ? 'ok' : 'down');
       li.innerHTML = `
+        <span class="conn-health conn-health-${healthClass}" title="${isHealthy === undefined ? 'Health unknown' : (isHealthy ? 'Online' : 'Unreachable')}"></span>
         <div class="conn-info">
           <strong>${escapeHtml(c.name)}</strong>
-          <span>${escapeHtml(c.user)}@${escapeHtml(c.host)}:${c.port}</span>
+          <span>${escapeHtml(c.user)}@${escapeHtml(c.host)}:${c.port} · ${lastUsedLabel(c.last_used_at)}</span>
         </div>
         <div class="conn-actions">
+          <button type="button" class="sample-btn" title="Create a sample dataset on this server">Sample</button>
           <button type="button" class="icon-btn conn-delete" title="Delete connection">&times;</button>
           <span class="chevron">&#8250;</span>
         </div>`;
       li.addEventListener('click', () => selectWizardConnection(c.id));
+      li.querySelector('.sample-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        useSampleDataset(c.id);
+      });
       li.querySelector('.conn-delete').addEventListener('click', async (e) => {
         e.stopPropagation();
         if (!confirm(`Delete connection "${c.name}"? Existing chats bound to it will fail.`)) return;
@@ -716,9 +736,25 @@ async function renderWizardConnections() {
   }
 }
 
+function lastUsedLabel(lastUsedAt) {
+  if (!lastUsedAt) return 'never used';
+  const diff = Date.now() - new Date(lastUsedAt).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'used just now';
+  if (min < 60) return `used ${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `used ${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  return `used ${day}d ago`;
+}
+
 async function selectWizardConnection(connectionId) {
   state.wizardConnectionId = connectionId;
   showWizardStep('database');
+  els.exploreSchema.classList.add('hidden');
+  els.exploreSchema.innerHTML = '';
+  els.exploreSchemaToggle.setAttribute('aria-pressed', 'false');
+  els.exploreSchemaCaret.textContent = '▶';
   els.databaseList.innerHTML = '<li class="db-empty">Loading databases…</li>';
   try {
     const { body } = await api(`/connections/${encodeURIComponent(connectionId)}/databases`);
@@ -754,6 +790,68 @@ function chooseDatabase(database) {
     els.input.value = state.draftQuestion;
     state.draftQuestion = null;
     els.form.dispatchEvent(new Event('submit'));
+  }
+}
+
+async function useSampleDataset(connectionId) {
+  if (!confirm('Create a fresh sample dataset (traceiq_sample) with orders, customers, and products on this server?')) return;
+  try {
+    const { status, body } = await api(`/connections/${encodeURIComponent(connectionId)}/sample-dataset`, { method: 'POST' });
+    if (status !== 201) throw new Error(body.error || 'Could not create sample dataset');
+    alert(`Sample dataset "${body.database}" ready.`);
+    if (state.wizardConnectionId === connectionId) {
+      await selectWizardConnection(connectionId);
+      const dbEls = els.databaseList.querySelectorAll('.db-item');
+      for (const el of dbEls) {
+        if (el.querySelector('.db-name').textContent === body.database) {
+          chooseDatabase(body.database);
+          return;
+        }
+      }
+    }
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function loadExploreSchema(connectionId) {
+  els.exploreSchema.innerHTML = '<p class="conn-empty">Loading schema…</p>';
+  try {
+    const { body } = await api(`/connections/${encodeURIComponent(connectionId)}/schema`);
+    if (!body.tables || !body.tables.length) {
+      els.exploreSchema.innerHTML = '<p class="conn-empty">No tables found.</p>';
+      return;
+    }
+    els.exploreSchema.innerHTML = '';
+    body.tables.forEach(t => {
+      const group = document.createElement('div');
+      group.className = 'schema-group';
+      group.innerHTML = `
+        <button type="button" class="schema-table-toggle" aria-expanded="false">
+          <span class="step-caret">&#9654;</span>
+          <span class="schema-table-name">${escapeHtml(t.schema)}.${escapeHtml(t.name)}</span>
+          <span class="schema-col-count">${t.columns.length} col${t.columns.length === 1 ? '' : 's'}</span>
+        </button>
+        <div class="schema-columns hidden"></div>`;
+      const bodyDiv = group.querySelector('.schema-columns');
+      bodyDiv.innerHTML = t.columns.map(c => `
+        <div class="schema-col">
+          <span class="schema-col-name">${escapeHtml(c.name)}</span>
+          <span class="schema-col-type">${escapeHtml(c.type)}</span>
+          ${c.key ? `<span class="schema-col-key">${escapeHtml(c.key)}</span>` : ''}
+          ${c.nullable ? '' : '<span class="schema-col-notnull">NOT NULL</span>'}
+        </div>`).join('');
+      group.querySelector('.schema-table-toggle').addEventListener('click', () => {
+        const toggle = group.querySelector('.schema-table-toggle');
+        const expanded = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!expanded));
+        toggle.querySelector('.step-caret').textContent = !expanded ? '▼' : '▶';
+        bodyDiv.classList.toggle('hidden', expanded);
+      });
+      els.exploreSchema.appendChild(group);
+    });
+  } catch (err) {
+    els.exploreSchema.innerHTML = `<p class="conn-empty">${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -813,6 +911,20 @@ els.toggleAddConnection.addEventListener('click', () => {
 els.wizardBack.addEventListener('click', () => {
   state.wizardConnectionId = null;
   showWizardStep('connection');
+});
+els.exploreSchemaToggle.addEventListener('click', () => {
+  if (!state.wizardConnectionId) return;
+  const closing = els.exploreSchema.classList.contains('hidden') === false;
+  if (closing) {
+    els.exploreSchema.classList.add('hidden');
+    els.exploreSchemaCaret.textContent = '▶';
+    els.exploreSchemaToggle.setAttribute('aria-pressed', 'false');
+  } else {
+    els.exploreSchema.classList.remove('hidden');
+    els.exploreSchemaCaret.textContent = '▼';
+    els.exploreSchemaToggle.setAttribute('aria-pressed', 'true');
+    loadExploreSchema(state.wizardConnectionId);
+  }
 });
 els.addConnectionForm.addEventListener('submit', submitConnection);
 els.logoutBtn.addEventListener('click', async () => {

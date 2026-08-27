@@ -56,6 +56,12 @@ async function migrate(conn) {
     );
     logger.info('Migration applied: db_connections.user_id');
   }
+  if (!(await columnExists(conn, 'db_connections', 'last_used_at'))) {
+    await conn.execute(
+      'ALTER TABLE db_connections ADD COLUMN last_used_at TIMESTAMP NULL AFTER user_id'
+    );
+    logger.info('Migration applied: db_connections.last_used_at');
+  }
 }
 
 async function setup() {

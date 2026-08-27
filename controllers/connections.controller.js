@@ -6,6 +6,9 @@ import {
   deleteConnection,
   verifyConnection,
   listDatabasesOnConnection,
+  checkConnectionHealth,
+  listConnectionSchema,
+  provisionSampleDataset,
 } from '../database/connection-store.js';
 
 const logger = pino({ name: 'connections-controller' });
@@ -90,6 +93,51 @@ export async function listDatabasesHandler(req, res) {
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to list databases');
     res.status(502).json({ error: `Could not reach MySQL server: ${err.message}` });
+  }
+}
+
+export async function healthHandler(req, res) {
+  try {
+    const rows = await listConnections(req.userId);
+    const results = await Promise.all(rows.map(r => checkConnectionHealth(r.id, req.userId)));
+    res.json({ connections: results.map(r => ({ ...r, name: rows.find(x => x.id === r.id)?.name ?? null })) });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to check connection health');
+    res.status(500).json({ error: 'Failed to check connection health' });
+  }
+}
+
+export async function schemaHandler(req, res) {
+  const { id } = req.params;
+  const database = typeof req.query.database === 'string' ? req.query.database : null;
+  try {
+    const row = await getConnectionRow(id, req.userId);
+    if (!row) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+    const schema = await listConnectionSchema(id, database, req.userId);
+    res.json(schema);
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to list schema');
+    res.status(502).json({ error: `Could not reach MySQL server: ${err.message}` });
+  }
+}
+
+export async function provisionSampleHandler(req, res) {
+  const { id } = req.params;
+  try {
+    const row = await getConnectionRow(id, req.userId);
+    if (!row) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+    const result = await provisionSampleDataset(id, req.userId);
+    if (!result.ok) {
+      return res.status(404).json({ error: result.error });
+    }
+    res.status(201).json({ database: result.database });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to provision sample dataset');
+    res.status(502).json({ error: `Could not provision sample dataset: ${err.message}` });
   }
 }
 

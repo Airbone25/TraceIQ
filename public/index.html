@@ -64,6 +64,10 @@
       </div>
 
       <section id="wizard-step-connection">
+        <div id="first-run-banner" class="first-run-banner hidden">
+          <p class="first-run-title">New here? Try a sample dataset</p>
+          <p class="first-run-sub">We'll create a small sales database on your server so you can explore TraceIQ right away.</p>
+        </div>
         <ul id="connections-list" class="connections-list"></ul>
         <button type="button" id="toggle-add-connection" class="link-btn">+ Add new connection</button>
         <form id="add-connection-form" class="add-connection-form hidden">
@@ -83,6 +87,10 @@
 
       <section id="wizard-step-database" class="hidden">
         <button type="button" id="wizard-back" class="back-btn">&larr; Change server</button>
+        <button type="button" id="explore-schema-toggle" class="link-btn explore-schema-toggle">
+          <span id="explore-schema-caret">&#9654;</span> Explore schema
+        </button>
+        <div id="explore-schema" class="explore-schema hidden"></div>
         <ul id="database-list" class="database-list"></ul>
       </section>
     </div>

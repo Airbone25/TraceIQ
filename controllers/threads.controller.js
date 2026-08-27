@@ -13,7 +13,7 @@ import {
   deleteThread,
 } from '../database/thread-store.js';
 import { createInvestigation } from '../database/investigation-store.js';
-import { getConnectionRow } from '../database/connection-store.js';
+import { getConnectionRow, touchConnection } from '../database/connection-store.js';
 import { startJob } from '../services/job-runner.js';
 import { validateDatabaseName } from './connections.controller.js';
 import env from '../config/env.js';
@@ -43,6 +43,7 @@ export async function createThreadHandler(req, res) {
       if (!connection) {
         return res.status(404).json({ error: 'Connection not found' });
       }
+      await touchConnection(connectionId).catch(() => {});
     } catch (err) {
       logger.error({ err: err.message }, 'Failed to verify connection');
       return res.status(500).json({ error: 'Failed to verify connection' });
@@ -81,6 +82,10 @@ export async function addFollowUpMessage(req, res) {
         error: 'A follow-up cannot be queued while the current investigation is still running',
         suggestion: 'Wait for the active investigation to finish.',
       });
+    }
+
+    if (thread.connection_id) {
+      await touchConnection(thread.connection_id).catch(() => {});
     }
 
     const threadContext = await getThreadContext(id, env.THREAD_CONTEXT_TURNS);

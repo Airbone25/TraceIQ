@@ -167,9 +167,12 @@ All endpoints below require a valid session cookie and return data scoped to the
 | `GET` | `/api/threads/:id` | Thread detail: messages, runs, and latest run steps |
 | `POST` | `/api/threads/:id/messages` | Ask a follow-up that continues from prior findings (`409` while a run is active) |
 | `POST` | `/api/connections` | Register a MySQL server (`name`, `host`, `port`, `user`, `password`) — verified before storing; password encrypted at rest |
-| `GET` | `/api/connections` | List registered connections (never returns credentials) |
+| `GET` | `/api/connections` | List registered connections (never returns credentials; includes `last_used_at`) |
+| `GET` | `/api/connections/health` | Live health check for every saved connection (`{connections: [{id, name, healthy, latencyMs, error}]}`) |
 | `DELETE` | `/api/connections/:id` | Remove a connection and its cached pools |
 | `GET` | `/api/connections/:id/databases` | List user databases on that server (system schemas filtered) |
+| `GET` | `/api/connections/:id/schema?database=NAME` | Tables + columns across a server (or one database) via INFORMATION_SCHEMA |
+| `POST` | `/api/connections/:id/sample-dataset` | One-click provision of a fresh `traceiq_sample` database (schema + seeded data) on that server |
 
 ### Example Request
 
@@ -287,6 +290,7 @@ db_connections
 ├── host, port, db_user
 ├── password_enc — AES-256-GCM ciphertext
 ├── user_id (nullable FK -> users)
+├── last_used_at — set whenever a chat binds/uses this connection
 └── created_at
 
 users

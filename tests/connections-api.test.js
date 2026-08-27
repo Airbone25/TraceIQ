@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   deleteConnection: vi.fn().mockResolvedValue(true),
   verifyConnection: vi.fn().mockResolvedValue(true),
   listDatabasesOnConnection: vi.fn().mockResolvedValue(['sales_db', 'financial_db']),
+  touchConnection: vi.fn().mockResolvedValue(undefined),
+  checkConnectionHealth: vi.fn().mockResolvedValue({ id: 'c1', healthy: true, latencyMs: 12, error: null }),
+  listConnectionSchema: vi.fn().mockResolvedValue({ database: null, tables: [{ schema: 'sales_db', name: 'orders', columns: [{ name: 'id', type: 'int', nullable: false, key: 'PRI' }] }] }),
+  provisionSampleDataset: vi.fn().mockResolvedValue({ ok: true, database: 'traceiq_sample' }),
 }));
 
 vi.mock('../middleware/auth.js', () => ({
@@ -24,6 +28,10 @@ vi.mock('../database/connection-store.js', () => ({
   deleteConnection: mocks.deleteConnection,
   verifyConnection: mocks.verifyConnection,
   listDatabasesOnConnection: mocks.listDatabasesOnConnection,
+  touchConnection: mocks.touchConnection,
+  checkConnectionHealth: mocks.checkConnectionHealth,
+  listConnectionSchema: mocks.listConnectionSchema,
+  provisionSampleDataset: mocks.provisionSampleDataset,
   SYSTEM_DATABASES: new Set(['information_schema', 'mysql', 'performance_schema', 'sys']),
 }));
 
@@ -63,6 +71,9 @@ describe('Connections API', () => {
     mocks.deleteConnection.mockResolvedValue(true);
     mocks.listDatabasesOnConnection.mockResolvedValue(['sales_db', 'financial_db']);
     mocks.getConnectionRow.mockResolvedValue({ id: 'conn-1', name: 'Prod' });
+    mocks.checkConnectionHealth.mockResolvedValue({ id: 'c1', healthy: true, latencyMs: 12, error: null });
+    mocks.listConnectionSchema.mockResolvedValue({ database: null, tables: [{ schema: 'sales_db', name: 'orders', columns: [{ name: 'id', type: 'int', nullable: false, key: 'PRI' }] }] });
+    mocks.provisionSampleDataset.mockResolvedValue({ ok: true, database: 'traceiq_sample' });
   });
 
   describe('POST /api/connections', () => {
@@ -127,6 +138,55 @@ describe('Connections API', () => {
     it('should return 404 for unknown connections', async () => {
       mocks.getConnectionRow.mockResolvedValue(null);
       const res = await request(app).get('/api/connections/nope/databases');
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/connections/health', () => {
+    it('should return health status for each saved connection', async () => {
+      mocks.listConnections.mockResolvedValue([{ id: 'c1', name: 'Prod' }]);
+      mocks.checkConnectionHealth.mockResolvedValue({ id: 'c1', healthy: true, latencyMs: 12, error: null });
+      const res = await request(app).get('/api/connections/health');
+
+      expect(res.status).toBe(200);
+      expect(res.body.connections[0]).toMatchObject({ id: 'c1', name: 'Prod', healthy: true });
+    });
+  });
+
+  describe('GET /api/connections/:id/schema', () => {
+    it('should return tables + columns for a connection', async () => {
+      const res = await request(app).get('/api/connections/conn-1/schema');
+
+      expect(res.status).toBe(200);
+      expect(mocks.listConnectionSchema).toHaveBeenCalledWith('conn-1', null, 'user-1');
+      expect(res.body.tables[0].name).toBe('orders');
+      expect(res.body.tables[0].columns[0].name).toBe('id');
+    });
+
+    it('should pass a database filter when provided', async () => {
+      await request(app).get('/api/connections/conn-1/schema?database=sales_db');
+      expect(mocks.listConnectionSchema).toHaveBeenCalledWith('conn-1', 'sales_db', 'user-1');
+    });
+
+    it('should return 404 for unknown connections', async () => {
+      mocks.getConnectionRow.mockResolvedValue(null);
+      const res = await request(app).get('/api/connections/nope/schema');
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('POST /api/connections/:id/sample-dataset', () => {
+    it('should provision a sample dataset and return its database name', async () => {
+      const res = await request(app).post('/api/connections/conn-1/sample-dataset');
+
+      expect(res.status).toBe(201);
+      expect(mocks.provisionSampleDataset).toHaveBeenCalledWith('conn-1', 'user-1');
+      expect(res.body.database).toBe('traceiq_sample');
+    });
+
+    it('should return 404 for unknown connections', async () => {
+      mocks.getConnectionRow.mockResolvedValue(null);
+      const res = await request(app).post('/api/connections/nope/sample-dataset');
       expect(res.status).toBe(404);
     });
   });

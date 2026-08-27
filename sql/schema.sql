@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS db_connections (
   db_user VARCHAR(120) NOT NULL,
   password_enc TEXT NOT NULL,
   user_id VARCHAR(36) NULL,
+  last_used_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
   UNIQUE KEY uq_db_connections_name (name),
