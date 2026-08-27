@@ -23,10 +23,15 @@
   </div>
 
   <div class="layout hidden" id="app-layout">
-    <aside class="sidebar">
+    <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
+        <button id="sidebar-toggle" class="icon-btn sidebar-toggle" aria-label="Toggle sidebar">&#9776;</button>
         <div class="logo">TraceIQ</div>
-        <span id="health-dot" class="health-dot" title="API status"></span>
+        <div class="sidebar-header-right">
+          <span id="health-dot" class="health-dot" title="API status"></span>
+          <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle theme">&#9681;</button>
+        </div>
       </div>
       <button id="new-thread-btn" class="new-thread-btn">+ New Investigation</button>
       <ul id="thread-list" class="thread-list"></ul>

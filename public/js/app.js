@@ -34,6 +34,10 @@ const els = {
   exploreSchemaToggle: document.getElementById('explore-schema-toggle'),
   exploreSchemaCaret: document.getElementById('explore-schema-caret'),
   exploreSchema: document.getElementById('explore-schema'),
+  themeToggle: document.getElementById('theme-toggle'),
+  sidebarToggle: document.getElementById('sidebar-toggle'),
+  sidebarBackdrop: document.getElementById('sidebar-backdrop'),
+  sidebar: document.getElementById('sidebar'),
 };
 
 let state = {
@@ -50,6 +54,8 @@ let state = {
   draftQuestion: null,
   wizardConnectionId: null,
   connectionsCache: [],
+  threadsLoading: false,
+  threadsLoaded: false,
 };
 
 async function api(path, options = {}) {
@@ -137,8 +143,29 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+const SQL_KEYWORDS = new Set(('SELECT FROM WHERE JOIN LEFT RIGHT INNER OUTER FULL CROSS ON AS AND OR NOT NULL IS IN LIKE BETWEEN EXISTS GROUP BY ORDER ASC DESC HAVING LIMIT OFFSET UNION ALL DISTINCT INSERT INTO VALUES UPDATE SET DELETE CREATE TABLE DROP ALTER ADD INDEX KEY PRIMARY FOREIGN REFERENCES UNIQUE CONSTRAINT DEFAULT CASE WHEN THEN ELSE END WITH RECURSIVE OVER PARTITION AS')
+  .split(/\s+/).filter(Boolean));
+
+function highlightSql(escapedSql) {
+  const tokenRe = /([A-Za-z_][A-Za-z0-9_]*)|('(?:[^'\\]|\\.)*'?)|("(?:[^"\\]|\\.)*"?)|(\b\d+(?:\.\d+)?\b)|(--[^\n]*|\/\*[\s\S]*?\*\/)/g;
+  return escapedSql.replace(tokenRe, (m, word, sq, dq, num, comment) => {
+    if (comment !== undefined && comment !== '') return `<span class="tok-com">${comment}</span>`;
+    if (sq !== undefined && sq !== '' || dq !== undefined && dq !== '') return `<span class="tok-str">${m}</span>`;
+    if (num !== undefined) return `<span class="tok-num">${num}</span>`;
+    if (word !== undefined && word !== '') {
+      const upper = word.toUpperCase();
+      if (SQL_KEYWORDS.has(upper)) return `<span class="tok-kw">${word}</span>`;
+      return word;
+    }
+    return m;
+  });
+}
+
 function inlineFormat(s) {
-  return s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return s
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
 }
 
 const NUMERIC_CELL = /^-?[\d,.]+%?$/;
@@ -162,35 +189,122 @@ function buildTable(blockLines) {
   return `<div class="table-wrap"><table class="answer-table"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>`;
 }
 
-function renderRichText(text) {
-  const lines = escapeHtml(text).split('\n');
+function renderCodeBlock(fence, code) {
+  const lang = (fence || '').trim().toLowerCase();
+  const inner = lang === 'sql' ? highlightSql(code) : code;
+  const id = 'cb' + Math.random().toString(36).slice(2, 8);
+  const head = `<div class="code-block-head"><span>${escapeHtml(lang || 'code')}</span><button class="copy-btn" data-copy="${id}">Copy</button></div>`;
+  return `<div class="code-block" id="${id}">${head}<pre><code>${inner}</code></pre></div>`;
+}
+
+function renderRichText(markdown) {
+  const escaped = escapeHtml(markdown);
+  const rawLines = escaped.split('\n');
+  const lines = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    if (rawLines[i].trim().startsWith('```')) {
+      const fence = rawLines[i].trim().slice(3);
+      const buf = [];
+      i++;
+      while (i < rawLines.length && !rawLines[i].trim().startsWith('```')) {
+        buf.push(rawLines[i]);
+        i++;
+      }
+      lines.push({ type: 'code', fence, body: buf.join('\n') });
+    } else {
+      lines.push({ type: 'text', body: rawLines[i] });
+    }
+  }
+
   let html = '';
-  let inList = false;
+  let listStack = [];
   let i = 0;
 
-  const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+  const closeListsUpTo = (depth) => {
+    while (listStack.length > depth) {
+      const t = listStack.pop();
+      html += t === 'ul' ? '</ul>' : '</ol>';
+    }
+  };
 
   while (i < lines.length) {
-    const line = lines[i];
-    if (line.trim().startsWith('|')) {
-      closeList();
+    const item = lines[i];
+    const line = item.body;
+
+    if (item.type === 'code') {
+      closeListsUpTo(0);
+      html += renderCodeBlock(item.fence, item.body);
+      i++;
+      continue;
+    }
+
+    const t = line.trim();
+    if (t.startsWith('|')) {
+      closeListsUpTo(0);
       let j = i;
-      while (j < lines.length && lines[j].trim().startsWith('|')) j++;
-      html += buildTable(lines.slice(i, j));
+      const block = [];
+      while (j < lines.length && lines[j].type === 'text' && lines[j].body.trim().startsWith('|')) {
+        block.push(lines[j].body);
+        j++;
+      }
+      html += buildTable(block);
       i = j;
       continue;
     }
-    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
-    if (bullet) {
-      if (!inList) { html += '<ul>'; inList = true; }
-      html += `<li>${inlineFormat(bullet[1])}</li>`;
-    } else {
-      closeList();
-      if (line.trim()) html += `<p>${inlineFormat(line)}</p>`;
+
+    const hr = t.match(/^(---|\*\*\*|___)$/);
+    if (hr && /^[-*_]{3,}$/.test(t)) {
+      closeListsUpTo(0);
+      html += '<hr>';
+      i++;
+      continue;
     }
+
+    const h = t.match(/^(#{1,3})\s+(.*)$/);
+    if (h) {
+      closeListsUpTo(0);
+      const n = h[1].length;
+      html += `<div class="md-h${n}">${inlineFormat(h[2])}</div>`;
+      i++;
+      continue;
+    }
+
+    const quote = t.match(/^(\&gt;|>)\s?(.*)$/);
+    if (quote) {
+      closeListsUpTo(0);
+      html += `<blockquote class="md-quote"><p class="md-quote-p">${inlineFormat(quote[2] || '')}</p></blockquote>`;
+      i++;
+      continue;
+    }
+
+    const ol = line.match(/^\s*(\d+)\.\s+(.*)$/);
+    const ul = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (ol) {
+      if (listStack[listStack.length - 1] !== 'ol') {
+        closeListsUpTo(0);
+        html += '<ol class="md-ol">';
+        listStack.push('ol');
+      }
+      html += `<li>${inlineFormat(ol[2])}</li>`;
+      i++;
+      continue;
+    }
+    if (ul) {
+      if (listStack[listStack.length - 1] !== 'ul') {
+        closeListsUpTo(0);
+        html += '<ul class="md-list">';
+        listStack.push('ul');
+      }
+      html += `<li>${inlineFormat(ul[1])}</li>`;
+      i++;
+      continue;
+    }
+
+    closeListsUpTo(0);
+    if (t) html += `<p>${inlineFormat(line)}</p>`;
     i++;
   }
-  closeList();
+  closeListsUpTo(0);
   return html;
 }
 
@@ -214,6 +328,15 @@ function scrollToBottomNow() {
 /* ---------- Sidebar ---------- */
 
 function renderSidebar() {
+  if (state.threadsLoading) {
+    els.threadList.innerHTML = [
+      '<li class="skeleton skeleton-thread"><span class="skeleton skeleton-thread-title"></span><span class="skeleton skeleton-thread-db"></span></li>',
+      '<li class="skeleton skeleton-thread"><span class="skeleton skeleton-thread-title"></span></li>',
+      '<li class="skeleton skeleton-thread"><span class="skeleton skeleton-thread-title"></span></li>',
+      '<li class="skeleton skeleton-thread"><span class="skeleton skeleton-thread-title"></span></li>',
+    ].join('');
+    return;
+  }
   els.threadList.innerHTML = '';
   if (state.threads.length === 0) {
     els.threadList.innerHTML = '<li class="sidebar-empty">No investigations yet</li>';
@@ -248,10 +371,13 @@ async function deleteThreadFlow(threadId, title) {
 
 async function refreshThreads() {
   try {
+    if (!state.threadsLoaded) { state.threadsLoading = true; renderSidebar(); }
     const { body } = await api('/threads');
     state.threads = body;
+    state.threadsLoading = false;
+    state.threadsLoaded = true;
     renderSidebar();
-  } catch { /* sidebar refresh is best-effort */ }
+  } catch { state.threadsLoading = false; renderSidebar(); /* sidebar refresh is best-effort */ }
 }
 
 /* ---------- Messages ---------- */
@@ -360,7 +486,7 @@ function buildStepCard(step) {
     summary = ok
       ? `${rowCount == null ? 'query' : rowCount + ' row' + (rowCount === 1 ? '' : 's')}${out.truncated ? ' (truncated)' : ''}${out.duration ? ' · ' + formatDuration(out.duration) : ''}`
       : 'failed';
-    details = `<div class="step-sql">${escapeHtml(sql || '')}</div>`;
+    details = `<div class="step-sql">${highlightSql(escapeHtml(sql || ''))}</div>`;
     if (Array.isArray(out.rows)) {
       details += renderSampleRows(out.rows);
     } else if (out.error) {
@@ -883,6 +1009,51 @@ async function submitConnection(event) {
   }
 }
 
+/* ---------- Theme ---------- */
+
+const THEME_KEY = 'traceiq-theme';
+const THEME_ICONS = { dark: '&#9680;', light: '&#9681;' };
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  els.themeToggle.innerHTML = THEME_ICONS[theme];
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = saved || (prefersDark ? 'dark' : 'light');
+  applyTheme(theme);
+  els.themeToggle.addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  });
+}
+
+/* ---------- Mobile sidebar ---------- */
+
+function closeSidebar() {
+  els.sidebar.classList.remove('open');
+  els.sidebarBackdrop.classList.remove('show');
+  els.sidebarBackdrop.classList.add('hidden');
+}
+
+function initMobile() {
+  els.sidebarToggle.addEventListener('click', () => {
+    const open = els.sidebar.classList.toggle('open');
+    if (open) {
+      els.sidebarBackdrop.classList.remove('hidden');
+      requestAnimationFrame(() => els.sidebarBackdrop.classList.add('show'));
+    } else {
+      closeSidebar();
+    }
+  });
+  els.sidebarBackdrop.addEventListener('click', closeSidebar);
+  const match = window.matchMedia('(min-width: 761px)');
+  match.addEventListener && match.addEventListener('change', (e) => { if (e.matches) closeSidebar(); });
+}
+
 /* ---------- Wiring ---------- */
 
 function bindExampleButtons() {
@@ -894,6 +1065,19 @@ function bindExampleButtons() {
   });
 }
 
+els.messages.addEventListener('click', (e) => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  const id = btn.getAttribute('data-copy');
+  if (!id) return;
+  const block = document.getElementById(id);
+  const text = block ? block.querySelector('pre').innerText : '';
+  navigator.clipboard && navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = orig; }, 1200);
+  });
+});
 els.newThreadBtn.addEventListener('click', () => {
   newThread();
   openNewChatWizard();
@@ -941,4 +1125,6 @@ els.authSwitch.addEventListener('click', (e) => {
 
 checkHealth();
 setInterval(checkHealth, 30000);
+initTheme();
+initMobile();
 initSession();
