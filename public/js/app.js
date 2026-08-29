@@ -17,6 +17,7 @@ const els = {
   logoutCancel: document.getElementById('logout-cancel'),
   sidebarUser: document.getElementById('sidebar-user'),
   sidebarUserEmail: document.getElementById('sidebar-user-email'),
+  sidebarUserAvatar: document.getElementById('sidebar-user-avatar'),
   appToast: document.getElementById('app-toast'),
   threadList: document.getElementById('thread-list'),
   newThreadBtn: document.getElementById('new-thread-btn'),
@@ -97,6 +98,10 @@ function updateSidebarUser(user) {
   if (user && user.email) {
     els.sidebarUserEmail.textContent = user.email;
     els.sidebarUserEmail.title = user.email;
+    if (els.sidebarUserAvatar) {
+      const initial = user.email.trim()[0]?.toUpperCase() || '?';
+      els.sidebarUserAvatar.textContent = initial;
+    }
     els.sidebarUser.classList.remove('hidden');
   } else {
     els.sidebarUser.classList.add('hidden');
