@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TraceIQ — Settings</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="settings-layout">
+    <aside class="settings-sidebar">
+      <a href="/" class="settings-back">&larr; Back to investigations</a>
+      <h1>Settings</h1>
+      <nav class="settings-nav">
+        <a href="#groq" class="settings-nav-link active" data-tab="groq">Groq API</a>
+        <a href="#account" class="settings-nav-link" data-tab="account">Account</a>
+        <a href="#appearance" class="settings-nav-link" data-tab="appearance">Appearance</a>
+        <a href="#connections" class="settings-nav-link" data-tab="connections">Connections</a>
+        <a href="#about" class="settings-nav-link" data-tab="about">About</a>
+      </nav>
+    </aside>
+
+    <main class="settings-main">
+      <div id="settings-toast" class="settings-toast hidden"></div>
+
+      <!-- Groq Section -->
+      <section id="tab-groq" class="settings-section">
+        <h2>Groq API Configuration</h2>
+        <p class="settings-desc">Used by the agent to run investigations. Your key is stored server-side and never exposed to the browser after saving. <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Get a key at console.groq.com</a></p>
+
+        <div class="settings-card">
+          <div class="form-group">
+            <label>Current key</label>
+            <div id="groq-current" class="current-key">Loading…</div>
+          </div>
+
+          <form id="groq-form">
+            <div class="form-group">
+              <label for="groq-key">New API key</label>
+              <input id="groq-key" type="password" placeholder="gsk_...  (leave blank to keep current)" autocomplete="off" spellcheck="false">
+              <span class="field-hint">Leave blank to keep the current key. Starts with <code>gsk_</code>.</span>
+            </div>
+            <div class="form-group">
+              <label for="groq-model">Model</label>
+              <input id="groq-model" type="text" placeholder="openai/gpt-oss-120b" spellcheck="false">
+              <span class="field-hint">Default: <code>openai/gpt-oss-120b</code>. You can use any Groq-supported model.</span>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" id="groq-save" class="primary-btn">Save Groq settings</button>
+              <button type="button" id="groq-verify" class="ghost-btn">Verify key</button>
+              <span id="groq-status" class="field-status"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="settings-card">
+          <h3>How it works</h3>
+          <ul class="settings-list">
+            <li>Key is saved to your server's <code>.env</code> and applied immediately — no restart needed.</li>
+            <li>Masked preview ends with the last 4 characters for verification.</li>
+            <li>Failed investigations due to an invalid key will surface as <code>401 Unauthorized</code> — return here to correct it.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Account Section -->
+      <section id="tab-account" class="settings-section hidden">
+        <h2>Account</h2>
+        <p class="settings-desc">Manage your TraceIQ sign-in. Email is used as your identity across investigations and connections.</p>
+
+        <div class="settings-card">
+          <div class="form-group">
+            <label>Current email</label>
+            <div id="account-email" class="current-key">Loading…</div>
+            <div id="account-created" class="field-hint"></div>
+          </div>
+
+          <form id="account-email-form">
+            <h3>Change email</h3>
+            <div class="form-group">
+              <label for="new-email">New email</label>
+              <input id="new-email" type="email" placeholder="you@example.com" autocomplete="email">
+            </div>
+            <div class="form-group">
+              <label for="email-current-pw">Current password</label>
+              <input id="email-current-pw" type="password" placeholder="Current password" autocomplete="current-password">
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="primary-btn">Update email</button>
+              <span id="email-status" class="field-status"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="settings-card">
+          <form id="account-password-form">
+            <h3>Change password</h3>
+            <div class="form-group">
+              <label for="pw-current">Current password</label>
+              <input id="pw-current" type="password" placeholder="Current password" autocomplete="current-password">
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:1">
+                <label for="pw-new">New password</label>
+                <input id="pw-new" type="password" placeholder="Min 8 characters" autocomplete="new-password">
+              </div>
+              <div class="form-group" style="flex:1">
+                <label for="pw-confirm">Confirm new password</label>
+                <input id="pw-confirm" type="password" placeholder="Repeat new password" autocomplete="new-password">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="primary-btn">Update password</button>
+              <span id="pw-status" class="field-status"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="settings-card danger-card">
+          <h3>Danger zone</h3>
+          <p>Permanently delete your account and all associated data — threads, investigations, and saved MySQL connections.</p>
+          <form id="delete-account-form" class="danger-form">
+            <div class="form-group">
+              <label for="delete-pw">Confirm password</label>
+              <input id="delete-pw" type="password" placeholder="Password" autocomplete="current-password">
+            </div>
+            <button type="submit" class="danger-btn">Delete account permanently</button>
+            <span id="delete-status" class="field-status"></span>
+          </form>
+        </div>
+      </section>
+
+      <!-- Appearance Section -->
+      <section id="tab-appearance" class="settings-section hidden">
+        <h2>Appearance</h2>
+        <p class="settings-desc">Tailor the look and feel. Theme is stored locally in your browser.</p>
+        <div class="settings-card">
+          <div class="form-group">
+            <label>Theme</label>
+            <div class="theme-picker">
+              <button type="button" data-theme="dark" class="theme-option">Dark</button>
+              <button type="button" data-theme="light" class="theme-option">Light</button>
+              <button type="button" data-theme="auto" class="theme-option">Auto</button>
+            </div>
+            <span class="field-hint">Auto follows your system preference.</span>
+          </div>
+        </div>
+        <div class="settings-card">
+          <h3>Tips</h3>
+          <ul class="settings-list">
+            <li>Dark is easier on the eyes for long investigations; light prints better.</li>
+            <li>Your choice is saved as <code>traceiq-theme</code> in local storage.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Connections Section -->
+      <section id="tab-connections" class="settings-section hidden">
+        <h2>Database Connections</h2>
+        <p class="settings-desc">Quick overview of your saved MySQL targets. Manage details in the main app.</p>
+        <div class="settings-card">
+          <div id="conn-summary">Loading…</div>
+          <div class="form-actions" style="margin-top:12px">
+            <a href="/" class="primary-btn" style="text-decoration:none; display:inline-block;">Open connections</a>
+            <span id="conn-status" class="field-status"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- About Section -->
+      <section id="tab-about" class="settings-section hidden">
+        <h2>About TraceIQ</h2>
+        <div class="settings-card">
+          <div id="about-meta" class="meta-grid">Loading…</div>
+          <div class="warn-box">
+            <strong>Security reminder:</strong> Always use a <strong>read-only</strong> MySQL user for investigation connections. TraceIQ runs SELECT queries against them.
+          </div>
+          <div class="form-actions">
+            <a href="https://console.groq.com" target="_blank" rel="noopener" class="ghost-btn" style="text-decoration:none;">Groq Console</a>
+            <button type="button" id="logout-btn" class="signout-btn" style="width:auto; padding:8px 14px;">
+              <span class="signout-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/js/settings.js"></script>
+</body>
+</html>

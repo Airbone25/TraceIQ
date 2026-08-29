@@ -35,7 +35,17 @@
       </div>
       <button id="new-thread-btn" class="new-thread-btn">+ New Investigation</button>
       <ul id="thread-list" class="thread-list"></ul>
-      <button id="logout-btn" class="link-btn logout-btn">Sign out</button>
+      <div class="sidebar-footer">
+        <div id="sidebar-user" class="sidebar-user hidden">
+          <span class="sidebar-user-icon">●</span>
+          <span id="sidebar-user-email" class="sidebar-user-email"></span>
+        </div>
+        <a href="/settings.html" class="settings-link" title="Settings"><span class="settings-link-icon">⚙</span> Settings</a>
+        <button id="logout-btn" class="signout-btn" title="Sign out" aria-label="Sign out">
+          <span class="signout-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+          <span class="signout-label">Sign out</span>
+        </button>
+      </div>
     </aside>
 
     <main class="chat-pane">
@@ -100,6 +110,19 @@
       </section>
     </div>
   </div>
+
+  <div id="logout-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="logout-modal-title">
+    <div class="modal logout-modal">
+      <h3 id="logout-modal-title">Sign out?</h3>
+      <p class="logout-modal-desc">You will need to sign in again to access your investigations.</p>
+      <div class="logout-modal-actions">
+        <button type="button" id="logout-cancel" class="ghost-btn">Cancel</button>
+        <button type="button" id="logout-confirm" class="danger-btn">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-toast" class="settings-toast hidden" role="status" aria-live="polite"></div>
 
   <script type="module" src="/js/app.js"></script>
 </body>

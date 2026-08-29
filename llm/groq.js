@@ -6,11 +6,21 @@ const logger = pino({ name: 'llm-groq' });
 
 let client = null;
 
-function getClient() {
+export function getClient() {
   if (!client) {
     client = new Groq({ apiKey: env.GROQ_API_KEY });
   }
   return client;
+}
+
+export function resetClient() {
+  client = null;
+}
+
+export function setGroqApiKey(apiKey) {
+  env.GROQ_API_KEY = apiKey;
+  process.env.GROQ_API_KEY = apiKey;
+  resetClient();
 }
 
 const MAX_RETRIES = 3;

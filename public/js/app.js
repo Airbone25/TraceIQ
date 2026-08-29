@@ -12,6 +12,12 @@ const els = {
   authSwitch: document.getElementById('auth-switch'),
   authToggleText: document.getElementById('auth-toggle-text'),
   logoutBtn: document.getElementById('logout-btn'),
+  logoutModal: document.getElementById('logout-modal'),
+  logoutConfirm: document.getElementById('logout-confirm'),
+  logoutCancel: document.getElementById('logout-cancel'),
+  sidebarUser: document.getElementById('sidebar-user'),
+  sidebarUserEmail: document.getElementById('sidebar-user-email'),
+  appToast: document.getElementById('app-toast'),
   threadList: document.getElementById('thread-list'),
   newThreadBtn: document.getElementById('new-thread-btn'),
   messages: document.getElementById('messages'),
@@ -77,8 +83,68 @@ async function api(path, options = {}) {
 
 let authMode = 'login';
 
+function showToast(msg, type = 'ok') {
+  if (!els.appToast) return;
+  els.appToast.textContent = msg;
+  els.appToast.className = `settings-toast show ${type}`;
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => els.appToast.classList.remove('show'), 2500);
+}
+
+function updateSidebarUser(user) {
+  if (!els.sidebarUser || !els.sidebarUserEmail) return;
+  if (user && user.email) {
+    els.sidebarUserEmail.textContent = user.email;
+    els.sidebarUserEmail.title = user.email;
+    els.sidebarUser.classList.remove('hidden');
+  } else {
+    els.sidebarUser.classList.add('hidden');
+  }
+}
+
+function openLogoutModal() {
+  if (!els.logoutModal) return;
+  els.logoutModal.classList.remove('hidden');
+  els.logoutConfirm?.focus();
+}
+
+function closeLogoutModal() {
+  if (!els.logoutModal) return;
+  els.logoutModal.classList.add('hidden');
+}
+
+async function performLogout() {
+  const btn = els.logoutConfirm || els.logoutBtn;
+  const origText = btn ? btn.textContent : '';
+  if (els.logoutBtn) {
+    els.logoutBtn.disabled = true;
+    els.logoutBtn.setAttribute('data-loading', 'true');
+    els.logoutBtn.querySelector('.signout-label').textContent = 'Signing out…';
+  }
+  if (els.logoutConfirm) {
+    els.logoutConfirm.disabled = true;
+    els.logoutConfirm.textContent = 'Signing out…';
+  }
+  try {
+    await api('/auth/logout', { method: 'POST' });
+  } catch { /* clear locally regardless */ }
+  closeLogoutModal();
+  if (els.logoutBtn) {
+    els.logoutBtn.disabled = false;
+    els.logoutBtn.removeAttribute('data-loading');
+    els.logoutBtn.querySelector('.signout-label').textContent = 'Sign out';
+  }
+  if (els.logoutConfirm) {
+    els.logoutConfirm.disabled = false;
+    els.logoutConfirm.textContent = origText || 'Sign out';
+  }
+  showToast('Signed out', 'ok');
+  sessionExpired();
+}
+
 function sessionExpired() {
   stopPolling();
+  updateSidebarUser(null);
   showAuthView();
 }
 
@@ -99,9 +165,11 @@ function enterApp() {
 
 async function initSession() {
   try {
-    await api('/auth/me');
+    const { body } = await api('/auth/me');
+    updateSidebarUser(body);
     enterApp();
   } catch {
+    updateSidebarUser(null);
     showAuthView();
   }
 }
@@ -135,6 +203,11 @@ async function submitAuth(event) {
   } finally {
     els.authSubmit.disabled = false;
   }
+  // refresh sidebar user after successful auth
+  try {
+    const { body } = await api('/auth/me');
+    updateSidebarUser(body);
+  } catch { /* best-effort */ }
 }
 
 function escapeHtml(text) {
@@ -1111,11 +1184,13 @@ els.exploreSchemaToggle.addEventListener('click', () => {
   }
 });
 els.addConnectionForm.addEventListener('submit', submitConnection);
-els.logoutBtn.addEventListener('click', async () => {
-  try {
-    await api('/auth/logout', { method: 'POST' });
-  } catch { /* clear locally regardless */ }
-  sessionExpired();
+// Sign out: modal with confirm + loading + toast
+els.logoutBtn.addEventListener('click', () => openLogoutModal());
+els.logoutCancel?.addEventListener('click', () => closeLogoutModal());
+els.logoutConfirm?.addEventListener('click', () => performLogout());
+els.logoutModal?.addEventListener('click', (e) => { if (e.target === els.logoutModal) closeLogoutModal(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && els.logoutModal && !els.logoutModal.classList.contains('hidden')) closeLogoutModal();
 });
 els.authForm.addEventListener('submit', submitAuth);
 els.authSwitch.addEventListener('click', (e) => {
