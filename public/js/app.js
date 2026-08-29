@@ -24,6 +24,7 @@ const els = {
   form: document.getElementById('ask-form'),
   input: document.getElementById('question-input'),
   sendBtn: document.getElementById('send-btn'),
+  composerWrap: document.getElementById('composer-wrap'),
   healthDot: document.getElementById('health-dot'),
   targetBadge: document.getElementById('target-badge'),
   newChatModal: document.getElementById('new-chat-modal'),
@@ -450,6 +451,18 @@ async function refreshThreads() {
     state.threadsLoading = false;
     state.threadsLoaded = true;
     renderSidebar();
+    // keep empty/select state in sync after loading threads
+    if (!state.activeThreadId) {
+      renderEmptyState();
+      updateTargetBadge();
+      if (state.pendingTarget) {
+        setComposerVisible(true);
+        setComposerEnabled(true);
+      } else {
+        setComposerVisible(false);
+        setComposerEnabled(false);
+      }
+    }
   } catch { state.threadsLoading = false; renderSidebar(); /* sidebar refresh is best-effort */ }
 }
 
@@ -642,6 +655,7 @@ function renderTerminalAnswer(detail) {
 }
 
 function fullRender(detail) {
+  setComposerVisible(true);
   clearMessages();
   for (const m of detail.messages) {
     appendMessage(m.role, m.content);
@@ -657,6 +671,7 @@ function fullRender(detail) {
 }
 
 function incrementalRender(detail) {
+  setComposerVisible(true);
   for (let i = state.renderedMessageCount; i < detail.messages.length; i++) {
     appendMessage(detail.messages[i].role, detail.messages[i].content);
   }
@@ -670,6 +685,7 @@ function renderThread(detail) {
   const isNewThread = state.renderedThreadId !== state.activeThreadId;
   const reachedTerminal = state.lastRunStatus === 'running' && run && run.status !== 'running';
 
+  setComposerVisible(true);
   els.input.placeholder = detail.target_database
     ? `Ask about ${detail.target_database}...`
     : 'Ask a question about your database...';
@@ -693,6 +709,7 @@ async function openThread(threadId) {
   state.detail = null;
   state.pendingTarget = null;
   state.draftQuestion = null;
+  setComposerVisible(true);
   els.targetBadge.classList.add('hidden');
   els.input.placeholder = 'Ask a question about your database...';
   renderSidebar();
@@ -738,16 +755,60 @@ function setComposerEnabled(enabled) {
   els.sendBtn.disabled = !enabled;
 }
 
-const EMPTY_STATE_HTML = `
-  <div class="empty-state">
-    <h2>Investigate your database</h2>
-    <p>Ask why a metric changed, which segment is affected, or what is driving a trend.<br>TraceIQ explores the data and reports findings with evidence.</p>
-    <div class="example-questions">
+function setComposerVisible(visible) {
+  if (els.composerWrap) {
+    els.composerWrap.classList.toggle('hidden', !visible);
+  }
+}
+
+function buildSelectEmptyHtml() {
+  if (state.pendingTarget) {
+    const conn = state.connectionsCache.find(c => c.id === state.pendingTarget.connectionId);
+    const connName = conn ? escapeHtml(conn.name) : 'your server';
+    const db = escapeHtml(state.pendingTarget.database);
+    return `
+  <div class="empty-state select-state">
+    <div class="select-icon-wrap"><span class="select-icon">⬡</span></div>
+    <h2>Ready to investigate</h2>
+    <p>Target: <strong>${db}</strong> on <strong>${connName}</strong></p>
+    <p class="select-hint">Type your question below to start — the agent will query <code>${db}</code>.</p>
+    <div class="example-questions" style="margin-top:16px">
       <button class="example-btn">Why did orders from Russia stop recently?</button>
-      <button class="example-btn">Why are payment failures spiking? Are certain user groups affected more?</button>
+      <button class="example-btn">Why are payment failures spiking?</button>
       <button class="example-btn">Which products saw an unusual surge in sales?</button>
     </div>
   </div>`;
+  }
+  if (state.threads.length === 0) {
+    return `
+  <div class="empty-state select-state">
+    <div class="select-icon-wrap"><span class="select-icon">◈</span></div>
+    <h2>Welcome to TraceIQ</h2>
+    <p>No investigations yet.<br>Create your first one to start querying.</p>
+    <button class="primary-btn select-cta" id="empty-new-investigation">+ New Investigation</button>
+    <p class="select-hint">Each investigation is tied to a MySQL database — you'll pick the server &amp; database first.</p>
+  </div>`;
+  }
+  return `
+  <div class="empty-state select-state">
+    <div class="select-icon-wrap"><span class="select-icon">◈</span></div>
+    <h2>Select an investigation</h2>
+    <p>Pick a thread from the sidebar<br>or start a fresh investigation.</p>
+    <button class="primary-btn select-cta" id="empty-new-investigation">+ New Investigation</button>
+    <p class="select-hint">Tip: click a thread on the left to continue, or create a new one.</p>
+  </div>`;
+}
+
+const EMPTY_STATE_HTML = buildSelectEmptyHtml();
+
+function renderEmptyState() {
+  const html = buildSelectEmptyHtml();
+  els.messages.innerHTML = html;
+  // bind CTA and examples inside empty state
+  const cta = document.getElementById('empty-new-investigation');
+  if (cta) cta.addEventListener('click', () => openNewChatWizard());
+  bindExampleButtons();
+}
 
 function newThread() {
   stopPolling();
@@ -756,16 +817,25 @@ function newThread() {
   state.detail = null;
   state.renderedThreadId = null;
   state.lastRunStatus = null;
+  // Starting fresh: clear any pending target/draft (they're only kept via wizard flow)
   state.pendingTarget = null;
   state.draftQuestion = null;
-  els.messages.innerHTML = EMPTY_STATE_HTML;
-  bindExampleButtons();
+  renderEmptyState();
   renderSidebar();
-  setComposerEnabled(true);
   updateTargetBadge();
-  els.input.placeholder = 'Ask a question about your database...';
-  els.input.value = '';
-  els.input.focus();
+  // Composer: hidden until a thread is selected or a target is chosen via wizard
+  if (state.pendingTarget) {
+    setComposerVisible(true);
+    setComposerEnabled(true);
+    els.input.placeholder = `Ask about ${state.pendingTarget.database}...`;
+    els.input.value = state.draftQuestion || '';
+    els.input.focus();
+  } else {
+    setComposerVisible(false);
+    setComposerEnabled(false);
+    els.input.placeholder = 'Select an investigation to begin…';
+    els.input.value = '';
+  }
 }
 
 async function submitQuestion(event) {
@@ -983,12 +1053,18 @@ function chooseDatabase(database) {
   state.pendingTarget = { connectionId: state.wizardConnectionId, database };
   closeNewChatWizard();
   updateTargetBadge();
+  // switch to ready empty state and expose composer
+  renderEmptyState();
+  setComposerVisible(true);
+  setComposerEnabled(true);
   els.input.placeholder = `Ask about ${database}...`;
   els.input.focus();
+  // re-bind examples inside the new empty state
   if (state.draftQuestion) {
     els.input.value = state.draftQuestion;
     state.draftQuestion = null;
-    els.form.dispatchEvent(new Event('submit'));
+    // small delay so user sees the target badge before auto-submit
+    setTimeout(() => els.form.dispatchEvent(new Event('submit')), 80);
   }
 }
 

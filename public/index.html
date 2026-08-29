@@ -50,21 +50,19 @@
 
     <main class="chat-pane">
       <div id="messages" class="messages">
-        <div class="empty-state">
-          <h2>Investigate your database</h2>
-          <p>Ask why a metric changed, which segment is affected, or what is driving a trend.<br>TraceIQ explores the data and reports findings with evidence.</p>
-          <div class="example-questions">
-            <button class="example-btn">Why did orders from Russia stop recently?</button>
-            <button class="example-btn">Why are payment failures spiking? Are certain user groups affected more?</button>
-            <button class="example-btn">Which products saw an unusual surge in sales?</button>
-          </div>
+        <div class="empty-state select-state" id="select-empty">
+          <div class="select-icon-wrap"><span class="select-icon">◈</span></div>
+          <h2>Select an investigation</h2>
+          <p>Pick a thread from the sidebar<br>or start a fresh one to query your databases.</p>
+          <button class="primary-btn select-cta" id="empty-new-investigation">+ New Investigation</button>
+          <p class="select-hint">Each investigation is bound to a MySQL database — you'll pick the server &amp; database first.</p>
         </div>
       </div>
 
-      <div id="composer-wrap" class="composer-wrap">
+      <div id="composer-wrap" class="composer-wrap hidden">
         <div id="target-badge" class="target-badge hidden"></div>
         <form id="ask-form" class="composer">
-          <textarea id="question-input" placeholder="Ask a question about your database..." rows="1" disabled></textarea>
+          <textarea id="question-input" placeholder="Select an investigation to begin…" rows="1" disabled></textarea>
           <button type="submit" id="send-btn" disabled aria-label="Send">&#10148;</button>
         </form>
       </div>
