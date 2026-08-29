@@ -20,6 +20,7 @@ function createMainWindow() {
     minHeight: 520,
     title: 'TraceIQ',
     backgroundColor: '#17181c',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: preloadPath(),
       nodeIntegration: false,
@@ -28,6 +29,7 @@ function createMainWindow() {
       spellcheck: false,
     },
   });
+  win.setMenuBarVisibility(false);
   win.webContents.setWindowOpenHandler(({ url }) => {
     openExternalSafe(url);
     return { action: 'deny' };
@@ -289,6 +291,10 @@ ipcMain.handle('desktop:save-settings', async (_e, payload) => {
 });
 
 // ---------- Menu ----------
+// Native menu bar is hidden by default (autoHideMenuBar: true + setMenuBarVisibility(false)).
+// File/Help are removed for a cleaner frame — access Settings via the in-app gear icon.
+// Press Alt to temporarily show the menu if needed. To fully disable even the Alt reveal,
+// uncomment `Menu.setApplicationMenu(null)` and remove the template below.
 
 function buildMenu() {
   const template = [
@@ -303,14 +309,6 @@ function buildMenu() {
       ],
     }] : []),
     {
-      label: 'File',
-      submenu: [
-        { label: 'Settings…', click: openSettings, accelerator: 'CmdOrCtrl+,' },
-        { type: 'separator' },
-        { role: 'quit' },
-      ],
-    },
-    {
       label: 'View',
       submenu: [
         { role: 'reload' },
@@ -323,35 +321,11 @@ function buildMenu() {
         { role: 'togglefullscreen' },
       ],
     },
-    {
-      label: 'Help',
-      submenu: [
-        {
-          label: 'About TraceIQ',
-          click: () => {
-            dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'About TraceIQ',
-              message: `TraceIQ v${app.getVersion()}`,
-              detail: `Data directory:\n${app.getPath('userData')}\n\nThe app runs a local-only server on 127.0.0.1. Always use a read-only MySQL user for investigation connections.`,
-              buttons: ['OK', 'Open Data Folder'],
-            }).then(({ response }) => {
-              if (response === 1) shell.openPath(app.getPath('userData'));
-            });
-          },
-        },
-        {
-          label: 'Open User Data Folder',
-          click: () => shell.openPath(app.getPath('userData')),
-        },
-        {
-          label: 'Get a Groq API key',
-          click: () => openExternalSafe('https://console.groq.com'),
-        },
-      ],
-    },
   ];
+  // Hide File/Help — keep only View (and macOS app menu). View stays hidden until Alt is pressed.
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  // To completely remove the menu bar (no Alt reveal), uncomment:
+  // Menu.setApplicationMenu(null);
 }
 
 // ---------- Lifecycle ----------
