@@ -5,12 +5,9 @@ const { mockQuery, mockRawQuery } = vi.hoisted(() => ({
   mockRawQuery: vi.fn(),
 }));
 
-vi.mock('../database/mysql.js', () => ({
-  query: mockQuery,
-  rawQuery: mockRawQuery,
-}));
-
 import { overviewTool } from '../tools/overview.tool.js';
+
+const execContext = { exec: { query: mockQuery, rawQuery: mockRawQuery } };
 
 function routeQuery(handlers) {
   return (sql) => {
@@ -36,7 +33,7 @@ describe('Overview Tool', () => {
       count: (table) => Promise.resolve([{ count: table === 'orders' ? 120 : 7 }]),
     }));
 
-    const result = await overviewTool.execute({});
+    const result = await overviewTool.execute({}, execContext);
 
     expect(result.success).toBe(true);
     expect(result.tables).toEqual([
@@ -57,7 +54,7 @@ describe('Overview Tool', () => {
       minMax: () => Promise.resolve([{ min_created_at: '2026-01-01', max_created_at: '2026-08-22', min_shipped_at: null, max_shipped_at: '2026-08-01' }]),
     }));
 
-    const result = await overviewTool.execute({});
+    const result = await overviewTool.execute({}, execContext);
 
     expect(result.success).toBe(true);
     expect(result.dateRanges).toEqual([
@@ -79,7 +76,7 @@ describe('Overview Tool', () => {
         : Promise.resolve([{ min_created_at: '2026-02-02', max_created_at: '2026-03-03' }]),
     }));
 
-    const result = await overviewTool.execute({});
+    const result = await overviewTool.execute({}, execContext);
 
     expect(result.success).toBe(true);
     expect(result.dateRanges).toEqual([
@@ -90,9 +87,16 @@ describe('Overview Tool', () => {
   it('should report success:false when tables cannot be listed', async () => {
     mockRawQuery.mockRejectedValue(new Error('no database selected'));
 
-    const result = await overviewTool.execute({});
+    const result = await overviewTool.execute({}, execContext);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('no database selected');
+  });
+
+  it('should reject execution when no target database is bound', async () => {
+    const result = await overviewTool.execute({});
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('No target database is bound');
   });
 });

@@ -62,6 +62,12 @@ vi.mock('../agent/prompts.js', () => ({
   buildStallMessage: (n) => `System note: Stall nudge after ${n} non-SQL calls.`,
 }));
 
+vi.mock('../services/target-context.js', () => ({
+  resolveExecutionContext: vi.fn().mockResolvedValue({
+    exec: { query: vi.fn(), rawQuery: vi.fn() },
+  }),
+}));
+
 import { runInvestigation } from '../agent/agent.js';
 import { createAgentState, stepsRemaining, timeRemainingMs, shouldNudge, buildNudgeMessage } from '../agent/state.js';
 

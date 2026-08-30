@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { getPool, closePool } from '../database/mysql.js';
+import { getPool, closePool, query, rawQuery } from '../database/mysql.js';
 import { getTableRowCounts } from '../database/queries.js';
+
+// Seed verification inspects the metadata/traceiq database directly.
+const metadataExec = { query, rawQuery };
 
 describe('Seed Data', () => {
   beforeAll(async () => {
@@ -8,27 +11,27 @@ describe('Seed Data', () => {
   });
 
   it('should have 20 customers', async () => {
-    const counts = await getTableRowCounts();
+    const counts = await getTableRowCounts(metadataExec);
     expect(counts.customers).toBe(20);
   });
 
   it('should have 10 products', async () => {
-    const counts = await getTableRowCounts();
+    const counts = await getTableRowCounts(metadataExec);
     expect(counts.products).toBe(10);
   });
 
   it('should have orders across 30 days', async () => {
-    const counts = await getTableRowCounts();
+    const counts = await getTableRowCounts(metadataExec);
     expect(counts.orders).toBeGreaterThan(80);
   });
 
   it('should have order items for every order', async () => {
-    const counts = await getTableRowCounts();
+    const counts = await getTableRowCounts(metadataExec);
     expect(counts.order_items).toBeGreaterThanOrEqual(counts.orders);
   });
 
   it('should have payments for every order', async () => {
-    const counts = await getTableRowCounts();
+    const counts = await getTableRowCounts(metadataExec);
     expect(counts.payments).toBe(counts.orders);
   });
 

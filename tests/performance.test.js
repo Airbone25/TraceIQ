@@ -11,6 +11,7 @@ const { mockChatCompletion, mockRegistryExecute, mockOverviewExecute, mockCreate
 
 vi.mock('../llm/groq.js', () => ({
   chatCompletion: mockChatCompletion,
+  RateLimitError: class RateLimitError extends Error {},
 }));
 
 vi.mock('../database/investigation-store.js', () => ({
@@ -59,6 +60,12 @@ vi.mock('../config/env.js', () => ({
 vi.mock('../agent/prompts.js', () => ({
   buildSystemPrompt: () => 'You are a test agent.',
   buildStallMessage: (n) => `System note: Stall nudge after ${n} non-SQL calls.`,
+}));
+
+vi.mock('../services/target-context.js', () => ({
+  resolveExecutionContext: vi.fn().mockResolvedValue({
+    exec: { query: vi.fn(), rawQuery: vi.fn() },
+  }),
 }));
 
 import { runInvestigation } from '../agent/agent.js';

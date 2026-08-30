@@ -5,11 +5,6 @@ const { mockQuery, mockRawQuery } = vi.hoisted(() => ({
   mockRawQuery: vi.fn(),
 }));
 
-vi.mock('../database/mysql.js', () => ({
-  query: mockQuery,
-  rawQuery: mockRawQuery,
-}));
-
 vi.mock('../config/env.js', () => ({
   default: {
     MAX_QUERY_ROWS: 500,
@@ -24,6 +19,8 @@ import { ToolRegistry } from '../tools/registry.js';
 import { sqlTool } from '../tools/sql.tool.js';
 import { overviewTool } from '../tools/overview.tool.js';
 
+const execContext = { exec: { query: mockQuery, rawQuery: mockRawQuery } };
+
 describe('Tool Input Validation', () => {
   let registry;
 
@@ -37,36 +34,36 @@ describe('Tool Input Validation', () => {
   describe('execute_sql validation', () => {
     it('should accept valid arguments', async () => {
       mockQuery.mockResolvedValue([]);
-      const result = await registry.execute('execute_sql', { sql: 'SELECT 1' });
+      const result = await registry.execute('execute_sql', { sql: 'SELECT 1' }, execContext);
       expect(result.success).toBe(true);
     });
 
     it('should reject missing sql parameter', async () => {
-      await expect(registry.execute('execute_sql', {})).rejects.toThrow('validation failed');
+      await expect(registry.execute('execute_sql', {}, execContext)).rejects.toThrow('validation failed');
     });
 
     it('should reject null sql parameter', async () => {
-      await expect(registry.execute('execute_sql', { sql: null })).rejects.toThrow('validation failed');
+      await expect(registry.execute('execute_sql', { sql: null }, execContext)).rejects.toThrow('validation failed');
     });
 
     it('should reject non-string sql parameter', async () => {
-      await expect(registry.execute('execute_sql', { sql: 123 })).rejects.toThrow('validation failed');
+      await expect(registry.execute('execute_sql', { sql: 123 }, execContext)).rejects.toThrow('validation failed');
     });
 
     it('should accept extra arguments (zod strips or passes through)', async () => {
       mockQuery.mockResolvedValue([]);
-      const result = await registry.execute('execute_sql', { sql: 'SELECT 1', evil: true });
+      const result = await registry.execute('execute_sql', { sql: 'SELECT 1', evil: true }, execContext);
       expect(result.success).toBe(true);
     });
 
     it('should reject dangerous SQL at validation layer', async () => {
-      const result = await registry.execute('execute_sql', { sql: 'DROP TABLE orders' });
+      const result = await registry.execute('execute_sql', { sql: 'DROP TABLE orders' }, execContext);
       expect(result.success).toBe(false);
       expect(result.error).toContain('validation failed');
     });
 
     it('should reject empty sql', async () => {
-      const result = await registry.execute('execute_sql', { sql: '' });
+      const result = await registry.execute('execute_sql', { sql: '' }, execContext);
       expect(result.success).toBe(false);
       expect(result.error).toContain('validation failed');
     });
@@ -86,7 +83,7 @@ describe('Tool Input Validation', () => {
         return Promise.resolve([{ count: 42 }]);
       });
 
-      const result = await registry.execute('get_overview', {});
+      const result = await registry.execute('get_overview', {}, execContext);
 
       expect(result.success).toBe(true);
       expect(result.tables).toEqual([{ name: 'orders', rowCount: 42 }]);
@@ -96,12 +93,12 @@ describe('Tool Input Validation', () => {
     });
 
     it('should reject unexpected parameters (strict schema)', async () => {
-      await expect(registry.execute('get_overview', { stat: 'row_counts' })).rejects.toThrow('validation failed');
+      await expect(registry.execute('get_overview', { stat: 'row_counts' }, execContext)).rejects.toThrow('validation failed');
     });
 
     it('should return success:false instead of throwing when the database fails', async () => {
       mockRawQuery.mockRejectedValue(new Error('connection refused'));
-      const result = await registry.execute('get_overview', {});
+      const result = await registry.execute('get_overview', {}, execContext);
       expect(result.success).toBe(false);
       expect(result.error).toContain('connection refused');
     });

@@ -18,6 +18,20 @@ vi.mock('../database/investigation-store.js', () => ({
   listInvestigations: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock('../database/connection-store.js', () => ({
+  testConnection: vi.fn().mockResolvedValue({ success: true }),
+  getConnectionRow: vi.fn().mockResolvedValue({
+    id: 'conn-1',
+    name: 'Test Connection',
+    dbHost: '127.0.0.1',
+    dbPort: 3306,
+    dbUser: 'test',
+    encryptedPassword: 'enc',
+  }),
+  touchConnection: vi.fn().mockResolvedValue(),
+  listConnectionRows: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('../agent/agent.js', () => ({
   runInvestigation: vi.fn().mockResolvedValue({
     status: 'completed',
@@ -72,7 +86,7 @@ describe('Health Endpoint', () => {
     const maxQuestion = 'a'.repeat(5000);
     const res = await request(app)
       .post('/api/investigate')
-      .send({ question: maxQuestion });
+      .send({ question: maxQuestion, connectionId: 'conn-1', database: 'traceiq' });
     expect(res.status).toBe(202);
     expect(res.body.investigationId).toBeTruthy();
     expect(res.body.status).toBe('queued');

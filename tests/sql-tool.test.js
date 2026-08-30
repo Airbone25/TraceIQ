@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../database/mysql.js', () => ({
-  query: vi.fn(),
-}));
-
 vi.mock('../config/env.js', () => ({
   default: {
     MAX_QUERY_ROWS: 500,
@@ -14,9 +10,11 @@ vi.mock('../config/env.js', () => ({
   },
 }));
 
+const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }));
+
 import { sqlTool } from '../tools/sql.tool.js';
-import { query } from '../database/mysql.js';
-import { validateSql } from '../security/sql-validator.js';
+
+const execContext = { exec: { query: mockQuery } };
 
 describe('execute_sql Tool', () => {
   beforeEach(() => {
@@ -32,9 +30,9 @@ describe('execute_sql Tool', () => {
 
   it('should execute valid SELECT query', async () => {
     const mockRows = [{ id: 1, name: 'test' }];
-    query.mockResolvedValue(mockRows);
+    mockQuery.mockResolvedValue(mockRows);
 
-    const result = await sqlTool.execute({ sql: 'SELECT * FROM orders' });
+    const result = await sqlTool.execute({ sql: 'SELECT * FROM orders' }, execContext);
 
     expect(result.success).toBe(true);
     expect(result.rows).toEqual(mockRows);
@@ -43,134 +41,134 @@ describe('execute_sql Tool', () => {
   });
 
   it('should append LIMIT when query has no LIMIT', async () => {
-    query.mockResolvedValue([]);
+    mockQuery.mockResolvedValue([]);
 
-    await sqlTool.execute({ sql: 'SELECT * FROM orders' });
+    await sqlTool.execute({ sql: 'SELECT * FROM orders' }, execContext);
 
-    const calledSql = query.mock.calls[0][0];
+    const calledSql = mockQuery.mock.calls[0][0];
     expect(calledSql).toMatch(/LIMIT\s+500$/i);
   });
 
   it('should not append LIMIT when query already has LIMIT', async () => {
-    query.mockResolvedValue([]);
+    mockQuery.mockResolvedValue([]);
 
-    await sqlTool.execute({ sql: 'SELECT * FROM orders LIMIT 10' });
+    await sqlTool.execute({ sql: 'SELECT * FROM orders LIMIT 10' }, execContext);
 
-    const calledSql = query.mock.calls[0][0];
+    const calledSql = mockQuery.mock.calls[0][0];
     expect(calledSql).toBe('SELECT * FROM orders LIMIT 10');
   });
 
   it('should strip trailing semicolon and append LIMIT when no LIMIT', async () => {
-    query.mockResolvedValue([]);
+    mockQuery.mockResolvedValue([]);
 
-    await sqlTool.execute({ sql: 'SELECT * FROM orders;' });
+    await sqlTool.execute({ sql: 'SELECT * FROM orders;' }, execContext);
 
-    const calledSql = query.mock.calls[0][0];
+    const calledSql = mockQuery.mock.calls[0][0];
     expect(calledSql).toBe('SELECT * FROM orders LIMIT 500');
   });
 
   it('should strip trailing semicolon and preserve existing LIMIT', async () => {
-    query.mockResolvedValue([]);
+    mockQuery.mockResolvedValue([]);
 
-    await sqlTool.execute({ sql: 'SELECT * FROM orders LIMIT 10;' });
+    await sqlTool.execute({ sql: 'SELECT * FROM orders LIMIT 10;' }, execContext);
 
-    const calledSql = query.mock.calls[0][0];
+    const calledSql = mockQuery.mock.calls[0][0];
     expect(calledSql).toBe('SELECT * FROM orders LIMIT 10');
   });
 
   it('should reject non-SELECT queries', async () => {
-    const result = await sqlTool.execute({ sql: 'INSERT INTO orders VALUES (1)' });
+    const result = await sqlTool.execute({ sql: 'INSERT INTO orders VALUES (1)' }, execContext);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('validation failed');
-    expect(query).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('should reject DROP queries', async () => {
-    const result = await sqlTool.execute({ sql: 'DROP TABLE orders' });
+    const result = await sqlTool.execute({ sql: 'DROP TABLE orders' }, execContext);
 
     expect(result.success).toBe(false);
-    expect(query).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('should reject DELETE queries', async () => {
-    const result = await sqlTool.execute({ sql: 'DELETE FROM orders WHERE id = 1' });
+    const result = await sqlTool.execute({ sql: 'DELETE FROM orders WHERE id = 1' }, execContext);
 
     expect(result.success).toBe(false);
-    expect(query).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('should reject UPDATE queries', async () => {
-    const result = await sqlTool.execute({ sql: 'UPDATE orders SET status = "done"' });
+    const result = await sqlTool.execute({ sql: 'UPDATE orders SET x = 1' }, execContext);
 
     expect(result.success).toBe(false);
-    expect(query).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('should reject queries with SLEEP()', async () => {
-    const result = await sqlTool.execute({ sql: 'SELECT SLEEP(5)' });
+    const result = await sqlTool.execute({ sql: 'SELECT SLEEP(5)' }, execContext);
 
     expect(result.success).toBe(false);
-    expect(query).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('should reject multi-statement queries', async () => {
-    const result = await sqlTool.execute({ sql: 'SELECT 1; DROP TABLE orders' });
+    const result = await sqlTool.execute({ sql: 'SELECT 1; DROP TABLE orders' }, execContext);
 
     expect(result.success).toBe(false);
-    expect(query).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('should reject empty SQL', async () => {
-    const result = await sqlTool.execute({ sql: '' });
+    const result = await sqlTool.execute({ sql: '' }, execContext);
 
     expect(result.success).toBe(false);
-    expect(query).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('should reject null SQL', async () => {
-    const result = await sqlTool.execute({ sql: null });
+    const result = await sqlTool.execute({ sql: null }, execContext);
 
     expect(result.success).toBe(false);
-    expect(query).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('should handle database errors gracefully', async () => {
-    query.mockRejectedValue(new Error('Table not found'));
+    mockQuery.mockRejectedValue(new Error('Table not found'));
 
-    const result = await sqlTool.execute({ sql: 'SELECT * FROM nonexistent' });
+    const result = await sqlTool.execute({ sql: 'SELECT * FROM nonexistent' }, execContext);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Table not found');
   });
 
   it('should pass params to query', async () => {
-    query.mockResolvedValue([]);
+    mockQuery.mockResolvedValue([]);
 
     await sqlTool.execute({
       sql: 'SELECT * FROM orders WHERE id > ?',
       params: [10],
-    });
+    }, execContext);
 
-    expect(query).toHaveBeenCalledWith(
+    expect(mockQuery).toHaveBeenCalledWith(
       expect.any(String),
       [10],
     );
   });
 
   it('should default params to empty array', async () => {
-    query.mockResolvedValue([]);
+    mockQuery.mockResolvedValue([]);
 
-    await sqlTool.execute({ sql: 'SELECT 1' });
+    await sqlTool.execute({ sql: 'SELECT 1' }, execContext);
 
-    expect(query).toHaveBeenCalledWith(expect.any(String), []);
+    expect(mockQuery).toHaveBeenCalledWith(expect.any(String), []);
   });
 
   it('should mark truncated when rows.length >= MAX_QUERY_ROWS', async () => {
     const manyRows = Array.from({ length: 500 }, (_, i) => ({ id: i }));
-    query.mockResolvedValue(manyRows);
+    mockQuery.mockResolvedValue(manyRows);
 
-    const result = await sqlTool.execute({ sql: 'SELECT * FROM orders LIMIT 500' });
+    const result = await sqlTool.execute({ sql: 'SELECT * FROM orders LIMIT 500' }, execContext);
 
     expect(result.success).toBe(true);
     expect(result.truncated).toBe(true);
@@ -178,41 +176,49 @@ describe('execute_sql Tool', () => {
   });
 
   it('should not mark truncated when rows.length < MAX_QUERY_ROWS', async () => {
-    query.mockResolvedValue([{ id: 1 }]);
+    mockQuery.mockResolvedValue([{ id: 1 }]);
 
-    const result = await sqlTool.execute({ sql: 'SELECT * FROM orders LIMIT 10' });
+    const result = await sqlTool.execute({ sql: 'SELECT * FROM orders LIMIT 10' }, execContext);
 
     expect(result.truncated).toBe(false);
   });
 
   it('should accept SHOW queries', async () => {
-    query.mockResolvedValue([{ Tables_in_traceiq: 'orders' }]);
+    mockQuery.mockResolvedValue([{ Tables_in_traceiq: 'orders' }]);
 
-    const result = await sqlTool.execute({ sql: 'SHOW TABLES' });
+    const result = await sqlTool.execute({ sql: 'SHOW TABLES' }, execContext);
 
     expect(result.success).toBe(true);
   });
 
   it('should accept DESCRIBE queries', async () => {
-    query.mockResolvedValue([{ Field: 'id', Type: 'int' }]);
+    mockQuery.mockResolvedValue([{ Field: 'id', Type: 'int' }]);
 
-    const result = await sqlTool.execute({ sql: 'DESCRIBE orders' });
+    const result = await sqlTool.execute({ sql: 'DESCRIBE orders' }, execContext);
 
     expect(result.success).toBe(true);
   });
 
   it('should accept EXPLAIN queries', async () => {
-    query.mockResolvedValue([{ id: 1, select_type: 'SIMPLE' }]);
+    mockQuery.mockResolvedValue([{ id: 1, select_type: 'SIMPLE' }]);
 
-    const result = await sqlTool.execute({ sql: 'EXPLAIN SELECT * FROM orders' });
+    const result = await sqlTool.execute({ sql: 'EXPLAIN SELECT * FROM orders' }, execContext);
 
     expect(result.success).toBe(true);
   });
 
   it('should include the failed query in error response', async () => {
-    const result = await sqlTool.execute({ sql: 'UPDATE orders SET x = 1' });
+    const result = await sqlTool.execute({ sql: 'UPDATE orders SET x = 1' }, execContext);
 
     expect(result.success).toBe(false);
     expect(result.query).toBe('UPDATE orders SET x = 1');
+  });
+
+  it('should reject execution when no target database is bound', async () => {
+    const result = await sqlTool.execute({ sql: 'SELECT 1' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('No target database is bound');
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 });

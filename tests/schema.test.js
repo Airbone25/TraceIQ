@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { getPool, closePool, query } from '../database/mysql.js';
+import { getPool, closePool, query, rawQuery } from '../database/mysql.js';
 import { getSchemaInfo, getTableRowCounts } from '../database/queries.js';
+
+// These tests verify the metadata schema itself, so they run against the
+// metadata pool on purpose (this is an admin/dev check, not a user path).
+const metadataExec = { query, rawQuery };
 
 describe('Schema', () => {
   beforeAll(async () => {
@@ -8,7 +12,7 @@ describe('Schema', () => {
   });
 
   it('should have all required tables', async () => {
-    const schema = await getSchemaInfo();
+    const schema = await getSchemaInfo(metadataExec);
     const tables = Object.keys(schema);
     expect(tables).toContain('customers');
     expect(tables).toContain('orders');
@@ -25,7 +29,7 @@ expect(tables.length).toBe(11);
   });
 
   it('should have correct columns on customers', async () => {
-    const schema = await getSchemaInfo();
+    const schema = await getSchemaInfo(metadataExec);
     const cols = schema.customers.columns.map(c => c.name);
     expect(cols).toContain('id');
     expect(cols).toContain('name');
@@ -37,7 +41,7 @@ expect(tables.length).toBe(11);
   });
 
   it('should have correct columns on orders', async () => {
-    const schema = await getSchemaInfo();
+    const schema = await getSchemaInfo(metadataExec);
     const cols = schema.orders.columns.map(c => c.name);
     expect(cols).toContain('id');
     expect(cols).toContain('customer_id');
