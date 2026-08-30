@@ -45,6 +45,21 @@ function normalizeAppSecret(value) {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// APP_SECRET is the envelope key used to encrypt stored MySQL target passwords
+// and to sign auth tokens. It must be the SAME value whether the app is run
+// with `npm start` (reads .env) or with the Electron shell (reads config.json).
+// The authoritative source is .env, so a connection password saved under one
+// launcher still decrypts under the other.
+function loadDotenvAppSecret() {
+  try {
+    require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
+  } catch { /* dotenv unavailable or file missing */ }
+  if (process.env.APP_SECRET && /^[0-9a-fA-F]{64}$/.test(process.env.APP_SECRET)) {
+    return process.env.APP_SECRET.toLowerCase();
+  }
+  return null;
+}
+
 function loadConfig() {
   const p = configPath();
   let file = {};
@@ -61,9 +76,19 @@ function loadConfig() {
     metadata: { ...DEFAULTS.metadata, ...(file.metadata || {}) },
     limits: { ...DEFAULTS.limits, ...(file.limits || {}) },
   };
-  if (!merged.appSecret || !/^[0-9a-fA-F]{64}$/.test(merged.appSecret)) {
+  // Prefer the .env APP_SECRET so both launchers share one encryption key.
+  const envSecret = loadDotenvAppSecret();
+  const current = merged.appSecret && /^[0-9a-fA-F]{64}$/.test(merged.appSecret)
+    ? merged.appSecret.toLowerCase()
+    : null;
+  if (envSecret && envSecret !== current) {
+    merged.appSecret = envSecret;
+    saveConfig(merged);
+  } else if (!envSecret && !current) {
     merged.appSecret = normalizeAppSecret(merged.appSecret);
     saveConfig(merged);
+  } else {
+    merged.appSecret = envSecret || current;
   }
   return merged;
 }
