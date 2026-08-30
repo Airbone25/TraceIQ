@@ -6,7 +6,9 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "migrate": "node scripts/migrate.mjs",
+    "migrate:dry": "node scripts/migrate.mjs --dry"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -18,5 +20,8 @@
     "mongoose": "^8.9.5",
     "pino": "^9.6.0",
     "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "mysql2": "^3.12.0"
   }
 }
