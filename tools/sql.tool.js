@@ -1,9 +1,6 @@
 import { z } from 'zod';
-import { query } from '../database/mysql.js';
 import { validateSql } from '../security/sql-validator.js';
 import env from '../config/env.js';
-
-const defaultExec = { query };
 
 const parameters = z.object({
   sql: z.string().describe('The SQL query to execute. Must be a SELECT, SHOW, DESCRIBE, or EXPLAIN statement.'),
@@ -44,9 +41,18 @@ export const sqlTool = {
     const hasLimit = /\bLIMIT\s+\d+/i.test(stripped);
     const limitedSql = hasLimit ? stripped : stripped + ` LIMIT ${env.MAX_QUERY_ROWS}`;
 
+    const exec = context?.exec;
+    if (!exec || typeof exec.query !== 'function') {
+      return {
+        success: false,
+        error: 'No target database is bound to this investigation. Select a connection and database first.',
+        query: limitedSql,
+      };
+    }
+
     try {
       const start = Date.now();
-      const rows = await (context?.exec ?? defaultExec).query(limitedSql, params);
+      const rows = await exec.query(limitedSql, params);
       const duration = Date.now() - start;
       return {
         success: true,

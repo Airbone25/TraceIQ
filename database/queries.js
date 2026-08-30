@@ -1,16 +1,20 @@
-import { query, rawQuery } from './mysql.js';
+function requireExec(exec) {
+  if (!exec || typeof exec.query !== 'function' || typeof exec.rawQuery !== 'function') {
+    throw new Error('An execution context targeting a user-selected database is required');
+  }
+  return exec;
+}
 
-const defaultExec = { query, rawQuery };
-
-export async function getSchemaInfo(exec = defaultExec) {
+export async function getSchemaInfo(exec) {
+  exec = requireExec(exec);
   const tables = await exec.rawQuery('SHOW TABLES');
   const tableNames = tables.map(row => Object.values(row)[0]);
 
   const schema = {};
   await Promise.all(tableNames.map(async (table) => {
     const [columns, indexes] = await Promise.all([
-      rawQuery(`SHOW COLUMNS FROM \`${table}\``),
-      rawQuery(`SHOW INDEX FROM \`${table}\``),
+      exec.rawQuery(`SHOW COLUMNS FROM \`${table}\``),
+      exec.rawQuery(`SHOW INDEX FROM \`${table}\``),
     ]);
     schema[table] = {
       columns: columns.map(c => ({
@@ -30,7 +34,8 @@ export async function getSchemaInfo(exec = defaultExec) {
   return schema;
 }
 
-export async function getTableRowCounts(exec = defaultExec) {
+export async function getTableRowCounts(exec) {
+  exec = requireExec(exec);
   const tables = await exec.rawQuery('SHOW TABLES');
   const tableNames = tables.map(row => Object.values(row)[0]);
   const counts = {};
@@ -41,7 +46,8 @@ export async function getTableRowCounts(exec = defaultExec) {
   return counts;
 }
 
-export async function getDateColumnRanges(exec = defaultExec) {
+export async function getDateColumnRanges(exec) {
+  exec = requireExec(exec);
   const columns = await exec.query(`
     SELECT TABLE_NAME AS tableName, COLUMN_NAME AS columnName
     FROM INFORMATION_SCHEMA.COLUMNS

@@ -17,8 +17,11 @@ export const overviewTool = {
 
   async execute(_input, context = undefined) {
     try {
-      const start = Date.now();
       const exec = context?.exec;
+      if (!exec || typeof exec.query !== 'function' || typeof exec.rawQuery !== 'function') {
+        return { success: false, error: 'No target database is bound to this investigation. Select a connection and database first.' };
+      }
+      const start = Date.now();
       const [counts, dateRanges] = await Promise.all([
         getTableRowCounts(exec),
         getDateColumnRanges(exec).catch(() => []),
