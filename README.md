@@ -151,10 +151,10 @@ The server starts on `http://localhost:3001`. Open it in a browser for the built
 
 TraceIQ ships as a desktop app so you can run investigations without git/npm/self‑hosting friction. The actual agent and Express server still run entirely on your machine, bound to `127.0.0.1` only — there is no cloud backend.
 
-- On first launch, a setup screen asks for your **Groq API key** and the **MySQL** connection used for TraceIQ's own metadata (accounts, threads, saved connections). A unique `APP_SECRET` is generated automatically and stored in your local user‑data config.
-- After setup, TraceIQ starts the local server, provisions the `traceiq` schema on the chosen MySQL server, and opens the main UI.
-- **Settings** (Menu → File → Settings, or `Ctrl+,`) lets you update the Groq key, default model, MySQL details, and server port, then shows the app version and data directory with an "Open user data folder" action.
-- All config lives in a JSON file under Electron's `userData` directory — never committed to the repo.
+- On first launch you see the **Login / Sign up** screen. Your account is created in TraceIQ's metadata store (a pre‑configured **cloud MySQL**, not editable in the UI).
+- The first time you log into an account, a short setup screen asks for your **Groq API key only** (model is fixed server‑side). The key is validated before you enter the app and stored per‑account in the metadata store; the default model is not user‑editable.
+- **Settings** (in‑app gear icon, or the macOS app menu) lets you update your password/email and re‑enter/re‑verify your Groq key. The desktop settings window only offers the server port, an "Open user data folder" action, and version/about info.
+- Cloud MySQL details, the per‑account Groq key, and the auto‑generated `APP_SECRET` are stored per‑machine/account and never committed to the repo.
 - External links (e.g. the Groq console) always open in your system browser. The renderer runs with `nodeIntegration: false`, `contextIsolation: true`, and a sandboxed preload.
 - For investigation connections you add inside the app, always use a MySQL user with **read‑only** privileges.
 
@@ -187,8 +187,8 @@ npm run desktop:pack        # unpacked app for quick local test
 - Manual publish: `npm run desktop:publish` (Windows) or `desktop:publish:all` (needs all runners). For local test without publish use `desktop:dist:*`.
 
 **Cloud MySQL (metadata) — free tier:**
-- **MySQL:** `Railway`, `PlanetScale`, `Aiven Free`, `TiDB Serverless`, `FreeSQL` all work. In `Settings` / `.env` set `MYSQL_HOST/PORT/USER/PASSWORD/DATABASE`; tick **Use SSL** (or `.env` `MYSQL_SSL=true`) for PlanetScale/Railway/Aiven. Pool `database/mysql.js` enables TLS `rejectUnauthorized:true` (override with `MYSQL_SSL_REJECT_UNAUTHORIZED=false` for self-signed).
-- Electron stores cloud host in `%APPDATA%\traceiq\config.json` via `electron/desktop-config.cjs:90` and provisions schema automatically on first launch (`desktop-server.cjs:109`).
+- **MySQL:** `Railway`, `PlanetScale`, `Aiven Free`, `TiDB Serverless`, `FreeSQL` all work. TraceIQ ships pre‑configured for cloud MySQL (SSL on, `rejectUnauthorized:true`); the connection is wired via `desktop/config.json` (under `%APPDATA%\traceiq\`) and placeholders — drop in your real host/credentials there or in `.env`, no UI toggles. Pool `database/mysql.js` enables TLS `rejectUnauthorized:true` (`MYSQL_SSL_REJECT_UNAUTHORIZED=false` for self‑signed).
+- The schema is provisioned automatically on server boot (`desktop-server.cjs`).
 - **Neon** is Postgres-only — not compatible with this `mysql2` metadata pool. Keep MySQL for zero-code deploy.
 
 Config file location (Windows): `%APPDATA%\traceiq\config.json`.
@@ -275,7 +275,7 @@ All configuration is via environment variables (loaded from `.env`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GROQ_API_KEY` | *required* | Groq API key for LLM access |
+| `GROQ_API_KEY` | *required* | Fallback Groq API key. Per-account keys stored in the users table override this per-request |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | LLM model to use |
 | `MYSQL_HOST` | `localhost` | MySQL host |
 | `MYSQL_PORT` | `3306` | MySQL port |
