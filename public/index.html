@@ -11,7 +11,7 @@
     <div class="auth-card">
       <h1>TraceIQ</h1>
       <p class="auth-sub">AI investigations for your MySQL databases</p>
-      <form id="auth-form">
+      <form id="auth-form" class="auth-form">
         <input id="auth-email" type="email" placeholder="Email" required autocomplete="email">
         <input id="auth-password" type="password" placeholder="Password (min 8 characters)" required minlength="8"
                autocomplete="current-password">
@@ -19,6 +19,23 @@
         <p id="auth-error" class="auth-error"></p>
       </form>
       <p class="auth-toggle"><span id="auth-toggle-text">No account?</span> <a href="#" id="auth-switch">Create one</a></p>
+    </div>
+  </div>
+
+  <div id="groq-setup-view" class="auth-view hidden">
+    <div class="auth-card">
+      <h1>Connect your AI investigator</h1>
+      <p class="auth-sub">TraceIQ uses the Groq API to explore your databases and answer your questions.</p>
+      <p class="auth-sub" style="margin-top:6px">Enter your Groq API key once. It's stored securely with your account and verified before you begin.</p>
+      <form id="groq-setup-form" class="auth-form" novalidate>
+        <input id="groq-setup-key" type="password" placeholder="Groq API key (gsk_...)" required autocomplete="off" spellcheck="false">
+        <div class="auth-actions">
+          <button type="submit" id="groq-setup-submit" class="primary-btn">Connect &amp; continue</button>
+          <button type="button" id="groq-setup-verify" class="ghost-btn">Verify key</button>
+        </div>
+        <p id="groq-setup-error" class="auth-error"></p>
+      </form>
+      <p class="auth-toggle"><span>Need a key?</span> <a href="#" id="groq-setup-link">Get one at console.groq.com</a></p>
     </div>
   </div>
 

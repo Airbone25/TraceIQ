@@ -11,6 +11,13 @@ const els = {
   authError: document.getElementById('auth-error'),
   authSwitch: document.getElementById('auth-switch'),
   authToggleText: document.getElementById('auth-toggle-text'),
+  groqSetupView: document.getElementById('groq-setup-view'),
+  groqSetupForm: document.getElementById('groq-setup-form'),
+  groqSetupKey: document.getElementById('groq-setup-key'),
+  groqSetupSubmit: document.getElementById('groq-setup-submit'),
+  groqSetupVerify: document.getElementById('groq-setup-verify'),
+  groqSetupError: document.getElementById('groq-setup-error'),
+  groqSetupLink: document.getElementById('groq-setup-link'),
   logoutBtn: document.getElementById('logout-btn'),
   logoutModal: document.getElementById('logout-modal'),
   logoutConfirm: document.getElementById('logout-confirm'),
@@ -156,13 +163,24 @@ function sessionExpired() {
 
 function showAuthView() {
   els.appLayout.classList.add('hidden');
+  els.groqSetupView.classList.add('hidden');
   els.authView.classList.remove('hidden');
   els.authPassword.value = '';
   els.authError.textContent = '';
 }
 
+function showGroqSetupView() {
+  els.authView.classList.add('hidden');
+  els.appLayout.classList.add('hidden');
+  els.groqSetupKey.value = '';
+  els.groqSetupError.textContent = '';
+  els.groqSetupError.classList.remove('shake');
+  els.groqSetupView.classList.remove('hidden');
+}
+
 function enterApp() {
   els.authView.classList.add('hidden');
+  els.groqSetupView.classList.add('hidden');
   els.appLayout.classList.remove('hidden');
   refreshThreads();
   cacheConnections();
@@ -173,6 +191,10 @@ async function initSession() {
   try {
     const { body } = await api('/auth/me');
     updateSidebarUser(body);
+    if (body.groqConfigured === false) {
+      showGroqSetupView();
+      return;
+    }
     enterApp();
   } catch {
     updateSidebarUser(null);
@@ -203,17 +225,18 @@ async function submitAuth(event) {
         password: els.authPassword.value,
       }),
     });
-    enterApp();
+    const { body } = await api('/auth/me');
+    updateSidebarUser(body);
+    if (body.groqConfigured === false) {
+      showGroqSetupView();
+    } else {
+      enterApp();
+    }
   } catch (err) {
     els.authError.textContent = err.message;
   } finally {
     els.authSubmit.disabled = false;
   }
-  // refresh sidebar user after successful auth
-  try {
-    const { body } = await api('/auth/me');
-    updateSidebarUser(body);
-  } catch { /* best-effort */ }
 }
 
 function escapeHtml(text) {
@@ -1277,6 +1300,75 @@ els.authForm.addEventListener('submit', submitAuth);
 els.authSwitch.addEventListener('click', (e) => {
   e.preventDefault();
   setAuthMode(authMode === 'login' ? 'register' : 'login');
+});
+
+// ---------- First-login Groq setup ----------
+function groqSetupErrorText(msg) {
+  els.groqSetupError.textContent = msg;
+}
+
+els.groqSetupLink?.addEventListener('click', (e) => {
+  e.preventDefault();
+  window.open('https://console.groq.com', '_blank', 'noopener');
+});
+
+els.groqSetupVerify?.addEventListener('click', async () => {
+  const key = els.groqSetupKey.value.trim();
+  if (!key) {
+    els.groqSetupError.classList.add('shake');
+    groqSetupErrorText('Enter your Groq API key first.');
+    els.groqSetupKey.focus();
+    setTimeout(() => els.groqSetupError.classList.remove('shake'), 400);
+    return;
+  }
+  els.groqSetupVerify.disabled = true;
+  els.groqSetupVerify.textContent = 'Verifying…';
+  try {
+    const { body } = await api('/settings/groq/verify', { method: 'POST', body: JSON.stringify({ apiKey: key }) });
+    if (body.ok) {
+      els.groqSetupError.textContent = '';
+      showToast('Key is valid', 'ok');
+    } else {
+      groqSetupErrorText(body.error || 'Key verification failed');
+    }
+  } catch (err) {
+    groqSetupErrorText(err.message);
+  } finally {
+    els.groqSetupVerify.disabled = false;
+    els.groqSetupVerify.textContent = 'Verify key';
+  }
+});
+
+els.groqSetupForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const key = els.groqSetupKey.value.trim();
+  if (!key) {
+    els.groqSetupError.classList.add('shake');
+    groqSetupErrorText('Enter your Groq API key first.');
+    els.groqSetupKey.focus();
+    setTimeout(() => els.groqSetupError.classList.remove('shake'), 400);
+    return;
+  }
+  if (key.length < 10) {
+    els.groqSetupError.classList.add('shake');
+    groqSetupErrorText('That key looks too short.');
+    els.groqSetupKey.focus();
+    setTimeout(() => els.groqSetupError.classList.remove('shake'), 400);
+    return;
+  }
+  els.groqSetupSubmit.disabled = true;
+  els.groqSetupSubmit.textContent = 'Connecting…';
+  try {
+    const { body } = await api('/settings/groq', { method: 'PUT', body: JSON.stringify({ apiKey: key }) });
+    if (!body.ok) return groqSetupErrorText('Failed to save your key.');
+    const me = await api('/auth/me');
+    updateSidebarUser(me.body);
+    enterApp();
+  } catch (err) {
+    groqSetupErrorText(err.message);
+    els.groqSetupSubmit.disabled = false;
+    els.groqSetupSubmit.textContent = 'Connect & continue';
+  }
 });
 
 checkHealth();

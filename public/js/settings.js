@@ -1,7 +1,6 @@
 const els = {
   groqCurrent: document.getElementById('groq-current'),
   groqKey: document.getElementById('groq-key'),
-  groqModel: document.getElementById('groq-model'),
   groqForm: document.getElementById('groq-form'),
   groqVerify: document.getElementById('groq-verify'),
   groqStatus: document.getElementById('groq-status'),
@@ -53,9 +52,8 @@ async function loadSettings() {
     const data = await api('/settings');
     // Groq
     const groq = data.groq;
-    els.groqCurrent.textContent = groq.hasKey ? `Active · ${groq.masked} · ${groq.model}` : 'No key set · ' + (groq.model || '');
+    els.groqCurrent.textContent = groq.hasKey ? `Active · ${groq.masked}` : 'No key set';
     els.groqCurrent.className = 'current-key ' + (groq.hasKey ? 'has-key' : 'no-key');
-    els.groqModel.value = groq.model || '';
     // Account
     els.accountEmail.textContent = data.account.email;
     els.accountCreated.textContent = data.account.created_at ? `Member since ${new Date(data.account.created_at).toLocaleDateString()}` : '';
@@ -108,22 +106,20 @@ function escapeHtml(s) {
 els.groqForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const key = els.groqKey.value.trim();
-  const model = els.groqModel.value.trim();
-  if (!key && !model) {
-    setStatus(els.groqStatus, 'Nothing to save', false);
+  if (!key) {
+    setStatus(els.groqStatus, 'Enter a key to save', false);
     return;
   }
   const btn = document.getElementById('groq-save');
   btn.disabled = true;
   btn.textContent = 'Saving…';
   try {
-    const res = await api('/settings/groq', { method: 'PUT', body: JSON.stringify({ apiKey: key, model }) });
+    const res = await api('/settings/groq', { method: 'PUT', body: JSON.stringify({ apiKey: key }) });
     setStatus(els.groqStatus, 'Saved ✔', true);
     showToast('Groq settings updated');
     els.groqKey.value = '';
-    els.groqCurrent.textContent = `Active · ${res.groq.masked} · ${res.groq.model}`;
+    els.groqCurrent.textContent = `Active · ${res.groq.masked}`;
     els.groqCurrent.className = 'current-key has-key';
-    els.groqModel.value = res.groq.model;
   } catch (err) {
     setStatus(els.groqStatus, err.message, false);
   } finally {

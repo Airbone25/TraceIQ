@@ -598,17 +598,33 @@ body {
 }
 .auth-card h1 { margin: 0 0 4px; font-size: 24px; }
 .auth-sub { margin: 0 0 20px; color: var(--text-muted); font-size: 13.5px; }
-#auth-form { display: flex; flex-direction: column; gap: 10px; }
-#auth-form input {
+.auth-form { display: flex; flex-direction: column; gap: 10px; }
+.auth-form input {
   background: var(--bg-composer);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
 }
-#auth-form .primary-btn { margin-top: 4px; padding: 10px; }
+.auth-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim, rgba(0,0,0,0.08));
+}
+.auth-form .primary-btn { margin-top: 4px; padding: 10px; }
+.auth-actions { display: flex; gap: 8px; }
+.auth-actions .primary-btn,
+.auth-actions .ghost-btn { flex: 1; padding: 10px; margin-top: 0; }
 .auth-error { color: var(--danger); font-size: 12.5px; margin: 2px 0 0; min-height: 15px; }
+.auth-error.shake { animation: auth-shake 0.4s; }
+@keyframes auth-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
 .auth-toggle { margin: 14px 0 0; color: var(--text-muted); font-size: 13px; text-align: center; }
 .auth-toggle a { color: var(--accent); text-decoration: none; }
 .auth-toggle a:hover { text-decoration: underline; }
