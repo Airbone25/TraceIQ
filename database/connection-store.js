@@ -1,12 +1,11 @@
-import crypto from 'crypto';
 import pino from 'pino';
 import mysql from 'mysql2/promise';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { query } from './mysql.js';
-import { encryptSecret, decryptSecret } from '../utils/crypto.js';
+import { Connection } from './collections/index.js';
 import { closeTargetPools } from './target-pools.js';
+import { encryptSecret, decryptSecret } from '../utils/crypto.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const logger = pino({ name: 'connection-store' });
@@ -14,65 +13,113 @@ const logger = pino({ name: 'connection-store' });
 export const SYSTEM_DATABASES = new Set(['information_schema', 'mysql', 'performance_schema', 'sys']);
 export const SAMPLE_DATABASE_NAME = process.env.SAMPLE_DATABASE_NAME || 'traceiq_sample';
 
-export function generateConnectionId() {
-  return crypto.randomUUID();
-}
+// Saved-connection metadata lives in MongoDB (encrypted password at rest).
 
-export async function createConnection({ name, host, port = 3306, user, password, userId = null }) {
-  const id = generateConnectionId();
-  await query(
-    'INSERT INTO db_connections (id, name, host, port, db_user, password_enc, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [id, name, host, port, user, encryptSecret(password), userId]
-  );
-  logger.info({ id, host, port }, 'Connection registered');
-  return { id, name, host, port, user };
-}
-
-export async function listConnections(userId) {
-  return query(
-    'SELECT id, name, host, port, db_user AS user, last_used_at, created_at FROM db_connections WHERE user_id = ? ORDER BY created_at ASC',
-    [userId]
-  );
-}
-
-export async function touchConnection(id) {
-  await query('UPDATE db_connections SET last_used_at = NOW() WHERE id = ?', [id]);
-}
-
-export async function getConnectionRow(id, userId = null) {
-  const rows = await query(
-    'SELECT * FROM db_connections WHERE id = ?' + (userId ? ' AND user_id = ?' : ''),
-    userId ? [id, userId] : [id]
-  );
-  return rows.length > 0 ? rows[0] : null;
-}
-
-export async function getConnectionCredentials(id, userId = null) {
-  const row = await getConnectionRow(id, userId);
-  if (!row) return null;
+function toLocalRow(doc) {
   return {
-    host: row.host,
-    port: row.port,
-    user: row.db_user,
-    password: decryptSecret(row.password_enc),
+    id: String(doc._id),
+    name: doc.name,
+    host: doc.host,
+    port: doc.port,
+    user: doc.user,
+    useSsl: doc.useSsl,
+    last_used_at: doc.lastUsedAt || null,
+    created_at: doc.created_at,
   };
 }
 
-export async function deleteConnection(id, userId = null) {
-  const result = await query(
-    'DELETE FROM db_connections WHERE id = ?' + (userId ? ' AND user_id = ?' : ''),
-    userId ? [id, userId] : [id]
-  );
-  if (result.affectedRows > 0) {
-    await closeTargetPools(id);
-    logger.info({ id }, 'Connection deleted');
-    return true;
-  }
-  return false;
+function decryptedCreds(doc) {
+  return {
+    id: String(doc._id),
+    host: doc.host,
+    port: doc.port,
+    user: doc.user,
+    password: decryptSecret(doc.passwordEnc),
+    useSsl: doc.useSsl,
+  };
 }
 
+export async function createConnection({ name, host, port = 3306, user, password, userId = null }) {
+  let doc;
+  try {
+    doc = await Connection.create({
+      userId,
+      name,
+      host,
+      port,
+      user,
+      passwordEnc: encryptSecret(password),
+      useSsl: false,
+    });
+  } catch (err) {
+    if (err?.code === 11000) {
+      throw Object.assign(new Error(`A connection named "${name}" already exists`), { code: 'ER_DUP_ENTRY' });
+    }
+    throw err;
+  }
+  logger.info({ id: String(doc._id), host, port }, 'Connection registered');
+  return { id: String(doc._id), name, host, port, user };
+}
+
+export async function listConnections(userId) {
+  const docs = await Connection.find({ userId }).sort({ created_at: 1 });
+  return docs.map(toLocalRow);
+}
+
+export async function touchConnection(id) {
+  await Connection.updateOne({ _id: id }, { $set: { lastUsedAt: new Date() } });
+}
+
+// Runs a Mongoose query, mapping a CastError (e.g. a malformed id from a route
+// parameter) to `null`/`false` ("not found") instead of a thrown 500.
+async function safeQuery(run, onNull) {
+  try {
+    return await run();
+  } catch (err) {
+    if (err && err.name === 'CastError') return onNull;
+    throw err;
+  }
+}
+
+export async function getConnectionRow(id, userId = null) {
+  const doc = await safeQuery(() =>
+    userId
+      ? Connection.findOne({ _id: id, userId })
+      : Connection.findById(id),
+    null,
+  );
+  return doc ? toLocalRow(doc) : null;
+}
+
+export async function getConnectionCredentials(id, userId = null) {
+  const doc = await safeQuery(() =>
+    userId
+      ? Connection.findOne({ _id: id, userId })
+      : Connection.findById(id),
+    null,
+  );
+  return doc ? decryptedCreds(doc) : null;
+}
+
+export async function deleteConnection(id, userId = null) {
+  const result = await safeQuery(() =>
+    userId
+      ? Connection.deleteOne({ _id: id, userId })
+      : Connection.deleteOne({ _id: id }),
+    { deletedCount: 0 },
+  );
+  if (!result.deletedCount) {
+    logger.info({ id }, 'Connection not found for delete');
+    return false;
+  }
+  await closeTargetPools(id);
+  logger.info({ id }, 'Connection deleted');
+  return true;
+}
+
+// ---- Local target MySQL inspection (uses decrypted credentials) ----
+
 function ephemeralSslFor(creds) {
-  // Use global MYSQL_SSL for cloud targets (e.g., PlanetScale/Railway/Aiven) but not localhost.
   const sslFlag = process.env.MYSQL_SSL;
   const enabled = sslFlag && (sslFlag.toLowerCase() === 'true' || sslFlag === '1');
   if (!enabled) return undefined;
@@ -116,7 +163,7 @@ export async function listDatabasesOnConnection(id, userId = null) {
 }
 
 export async function checkConnectionHealth(id, userId = null) {
-  const creds = await getConnectionCredentials(id, userId);
+  const creds = await getConnectionCredentials(id, userId).catch(() => null);
   if (!creds) return { id, healthy: false, latencyMs: null, error: 'Connection not found' };
   const started = Date.now();
   try {

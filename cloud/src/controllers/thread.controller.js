@@ -198,10 +198,30 @@ export async function deleteThreadHandler(req, res) {
   }
 }
 
+// Record the assistant's final answer for a thread (written by the local agent
+// once an investigation completes with an answer).
+export async function addAssistantMessageHandler(req, res) {
+  const { content } = req.body || {};
+  if (typeof content !== 'string' || content.trim() === '') {
+    return res.status(400).json({ error: 'content is required' });
+  }
+  try {
+    const thread = await Thread.findOne({ _id: req.params.id, userId: req.userId });
+    if (!thread) {
+      return res.status(404).json({ error: 'Thread not found' });
+    }
+    await Message.create({ userId: req.userId, threadId: thread._id, role: 'assistant', content });
+    await Thread.updateOne({ _id: thread._id }, { $set: { updated_at: new Date() } });
+    return res.status(201).json({ ok: true });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to add assistant message');
+    return res.status(500).json({ error: 'Failed to add assistant message', detail: err.message });
+  }
+}
+
 // Recent thread context (last N messages' assistant answers) used by the local
 // agent for follow-up investigations.
-export async function getThreadContextHandler(req, res) {
-  const turns = Math.max(1, parseInt(req.query.turns || '3', 10) || 3);
+export async function getThreadContextHandler(req, res) {  const turns = Math.max(1, parseInt(req.query.turns || '3', 10) || 3);
   try {
     const thread = await Thread.findOne({ _id: req.params.id, userId: req.userId });
     if (!thread) {

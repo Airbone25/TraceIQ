@@ -98,18 +98,18 @@ async function bootApp() {
   booting = true;
   console.log('[boot] starting…');
   try {
-    // Reapply the (idempotent) schema each launch so a fresh/updated metadata DB works.
+    // Verify the MongoDB product-data store is reachable before starting.
     try {
-      console.log('[boot] provisioning schema…');
-      await desktopServer.provisionSchema();
-      console.log('[boot] schema ok');
+      console.log('[boot] checking MongoDB…');
+      await desktopServer.checkDatabase();
+      console.log('[boot] MongoDB ok');
     } catch (err) {
-      console.error('[boot] schema provisioning FAILED:', err.message);
+      console.error('[boot] MongoDB check FAILED:', err.message);
       dialog.showMessageBox(mainWindow, {
         type: 'warning',
-        title: 'Metadata database unavailable',
-        message: 'Could not connect to the MySQL database that stores app data.',
-        detail: `${err.message}\n\nOpen Settings to correct the MySQL details, then relaunch.`,
+        title: 'Product-data store unavailable',
+        message: 'Could not connect to the MongoDB database that stores app data.',
+        detail: `${err.message}\n\nOpen Settings to set MONGODB_URI (Atlas or self-hosted), then relaunch.`,
         buttons: ['Open Settings', 'Quit'],
       }).then(({ response }) => {
         if (response === 0) openSettings();
@@ -146,7 +146,7 @@ async function startServerAndLoad() {
     console.error('Server exited before becoming ready', result);
     dialog.showErrorBox(
       'Server failed to start',
-      `The TraceIQ background server crashed during startup (exit code ${result.code}).\n\nCheck your MySQL and Groq settings, then relaunch. See the logs for details.`
+      `The TraceIQ background server crashed during startup (exit code ${result.code}).\n\nCheck your MongoDB and Groq settings, then relaunch. See the logs for details.`
     );
     return;
   }
@@ -154,7 +154,7 @@ async function startServerAndLoad() {
     await desktopServer.stopServer();
     dialog.showErrorBox(
       'Server failed to start',
-      `The TraceIQ server did not become ready within 25s on port ${port}. Check your MySQL and Groq settings, then relaunch.`
+      `The TraceIQ server did not become ready within 25s on port ${port}. Check your MongoDB and Groq settings, then relaunch.`
     );
     return;
   }
@@ -202,6 +202,7 @@ ipcMain.handle('desktop:get-config', () => {
   return {
     groqModel: cfg.groqModel,
     serverPort: cfg.serverPort,
+    mongodbUri: cfg.mongodbUri,
     metadata: cfg.metadata,
     limits: cfg.limits,
     groqKey: maskKey(cfg.groqApiKey),
@@ -220,6 +221,9 @@ ipcMain.handle('desktop:save-settings', async (_e, payload) => {
   }
   if (typeof payload.groqModel === 'string') {
     next.groqModel = payload.groqModel.trim() || 'openai/gpt-oss-120b';
+  }
+  if (typeof payload.mongodbUri === 'string' && payload.mongodbUri.trim() !== '') {
+    next.mongodbUri = payload.mongodbUri.trim();
   }
   if (payload.metadata && typeof payload.metadata === 'object') {
     next.metadata = {
@@ -241,11 +245,11 @@ ipcMain.handle('desktop:save-settings', async (_e, payload) => {
     desktopConfig.saveConfig(next);
   }
 
-  // Reflect the new configuration: apply schema, restart the server, reload the app.
+  // Reflect the new configuration: verify the store, restart the server, reload the app.
   try {
-    await desktopServer.provisionSchema();
+    await desktopServer.checkDatabase();
   } catch (err) {
-    return { ok: false, error: `Metadata MySQL error: ${err.message}` };
+    return { ok: false, error: `MongoDB connection error: ${err.message}` };
   }
   await desktopServer.stopServer();
   desktopServer.startServer();

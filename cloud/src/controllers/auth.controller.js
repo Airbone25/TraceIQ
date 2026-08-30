@@ -86,6 +86,53 @@ export async function logoutHandler(_req, res) {
   return res.status(200).json({ ok: true });
 }
 
+export async function updateAccountHandler(req, res) {
+  const userId = req.userId;
+  const { currentPassword, email, newEmail, newPassword, password } = req.body || {};
+  const targetEmail = email ?? newEmail;
+  const targetNewPassword = newPassword ?? password;
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'currentPassword is required to make changes' });
+    }
+    const ok = await bcrypt.compare(String(currentPassword), user.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    if (targetEmail) {
+      const trimmed = String(targetEmail).trim().toLowerCase();
+      if (!EMAIL_RE.test(trimmed)) {
+        return res.status(400).json({ error: 'A valid email address is required' });
+      }
+      const existing = await User.findOne({ email: trimmed });
+      if (existing && String(existing._id) !== String(userId)) {
+        return res.status(409).json({ error: 'An account with this email already exists' });
+      }
+      user.email = trimmed;
+    }
+
+    if (targetNewPassword) {
+      const pw = String(targetNewPassword);
+      if (pw.length < 8) {
+        return res.status(400).json({ error: 'New password must be at least 8 characters' });
+      }
+      user.passwordHash = await bcrypt.hash(pw, BCRYPT_ROUNDS);
+    }
+
+    await user.save();
+    return res.json(publicUser(user));
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to update account');
+    return res.status(500).json({ error: 'Failed to update account', detail: err.message });
+  }
+}
+
 export async function deleteAccountHandler(req, res) {
   const userId = req.userId;
   try {

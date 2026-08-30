@@ -1,54 +1,91 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { query } from './mysql.js';
+import { User, GroqKey, Connection, Thread, Message, Investigation, Step } from './collections/index.js';
+import { encryptSecret, decryptSecret } from '../utils/crypto.js';
 
 const BCRYPT_ROUNDS = 10;
+const DEFAULT_MODEL = 'openai/gpt-oss-120b';
 
 export function generateUserId() {
   return crypto.randomUUID();
 }
 
+// Map a Mongo user document to the snake_case row shape the rest of the app
+// expects, keeping callers (auth/settings controllers) unchanged.
+function toUserRow(doc, includeHash = false) {
+  if (!doc) return null;
+  const row = {
+    id: String(doc._id),
+    email: doc.email,
+    groq_configured: doc.groqConfigured,
+    created_at: doc.created_at,
+  };
+  if (includeHash) row.password_hash = doc.passwordHash;
+  return row;
+}
+
 export async function createUser({ email, password }) {
-  const id = generateUserId();
   const normalizedEmail = email.trim().toLowerCase();
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  await query(
-    'INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
-    [id, normalizedEmail, passwordHash]
-  );
-  return { id, email: normalizedEmail };
+  const doc = await User.create({ email: normalizedEmail, passwordHash });
+  return { id: String(doc._id), email: normalizedEmail };
 }
 
 export async function getUserByEmail(email) {
-  const rows = await query('SELECT * FROM users WHERE email = ?', [email.trim().toLowerCase()]);
-  return rows.length > 0 ? rows[0] : null;
+  const doc = await User.findOne({ email: email.trim().toLowerCase() });
+  return toUserRow(doc, true);
 }
 
 export async function getUserById(id) {
-  const rows = await query('SELECT id, email, groq_configured, created_at FROM users WHERE id = ?', [id]);
-  return rows.length > 0 ? rows[0] : null;
+  const doc = await User.findById(id);
+  return toUserRow(doc, false);
 }
 
 export async function getUserGroqConfig(id) {
-  const rows = await query('SELECT groq_api_key, groq_model, groq_configured FROM users WHERE id = ?', [id]);
-  if (rows.length === 0) return null;
-  const row = rows[0];
+  const key = await GroqKey.findOne({ userId: id, active: true });
+  if (!key || !key.apiKeyEnc) {
+    return { apiKey: null, model: DEFAULT_MODEL, configured: false };
+  }
+  let plain = null;
+  try {
+    plain = decryptSecret(key.apiKeyEnc);
+  } catch {
+    plain = null;
+  }
   return {
-    apiKey: row.groq_api_key,
-    model: row.groq_model,
-    configured: Number(row.groq_configured) === 1,
+    apiKey: plain,
+    model: key.model || DEFAULT_MODEL,
+    configured: Boolean(plain),
   };
 }
 
 export async function setUserGroqConfig(id, { apiKey, model }) {
-  const current = (await getUserGroqConfig(id)) || {};
-  const nextKey = apiKey != null && String(apiKey).trim() !== '' ? String(apiKey).trim() : current.apiKey;
-  const nextModel = model != null && String(model).trim() !== '' ? String(model).trim() : (current.model || null);
-  await query(
-    'UPDATE users SET groq_api_key = ?, groq_model = ?, groq_configured = 1 WHERE id = ?',
-    [nextKey, nextModel, id]
-  );
-  return { configured: true, hasKey: Boolean(nextKey), model: nextModel || null };
+  const updates = {};
+  if (apiKey != null && String(apiKey).trim() !== '') {
+    updates.apiKeyEnc = encryptSecret(String(apiKey).trim());
+  }
+  if (model != null && String(model).trim() !== '') {
+    updates.model = String(model).trim();
+  }
+
+  let key = await GroqKey.findOne({ userId: id, name: 'default' });
+  if (!key) {
+    key = await GroqKey.create({ userId: id, name: 'default', active: true });
+  }
+  if (updates.apiKeyEnc) key.apiKeyEnc = updates.apiKeyEnc;
+  if (updates.model) key.model = updates.model;
+  key.active = true;
+  await key.save();
+
+  await User.updateOne({ _id: id }, { $set: { groqConfigured: true } });
+
+  let plain = null;
+  try {
+    plain = updates.apiKeyEnc ? String(apiKey).trim() : key.apiKeyEnc ? decryptSecret(key.apiKeyEnc) : null;
+  } catch {
+    plain = null;
+  }
+  return { configured: true, hasKey: Boolean(plain), model: key.model || DEFAULT_MODEL };
 }
 
 export async function verifyPassword(plainText, passwordHash) {
@@ -57,28 +94,27 @@ export async function verifyPassword(plainText, passwordHash) {
 
 export async function updateUserEmail(id, newEmail) {
   const normalized = newEmail.trim().toLowerCase();
-  await query('UPDATE users SET email = ? WHERE id = ?', [normalized, id]);
+  await User.updateOne({ _id: id }, { $set: { email: normalized } });
   return { id, email: normalized };
 }
 
 export async function updateUserPassword(id, newPassword) {
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-  await query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, id]);
+  await User.updateOne({ _id: id }, { $set: { passwordHash: hash } });
 }
 
 export async function deleteUser(id) {
-  // cascade deletes: investigation_steps -> investigations -> threads/messages + connections
-  // Delete steps via investigations
-  await query('DELETE FROM investigation_steps WHERE investigation_id IN (SELECT id FROM investigations WHERE user_id = ?)', [id]);
-  await query('DELETE FROM investigations WHERE user_id = ?', [id]);
-  await query('DELETE FROM investigation_messages WHERE thread_id IN (SELECT id FROM investigation_threads WHERE user_id = ?)', [id]);
-  await query('DELETE FROM investigation_threads WHERE user_id = ?', [id]);
-  await query('DELETE FROM db_connections WHERE user_id = ?', [id]);
-  const result = await query('DELETE FROM users WHERE id = ?', [id]);
+  const investigations = await Investigation.find({ userId: id }).select('_id');
+  await Step.deleteMany({ investigationId: { $in: investigations.map(i => i._id) } });
+  await Investigation.deleteMany({ userId: id });
+  await Message.deleteMany({ userId: id });
+  await Thread.deleteMany({ userId: id });
+  await Connection.deleteMany({ userId: id });
+  await GroqKey.deleteMany({ userId: id });
+  const result = await User.deleteOne({ _id: id });
   return result;
 }
 
 export async function getUserCount() {
-  const rows = await query('SELECT COUNT(*) as cnt FROM users');
-  return rows[0]?.cnt ?? 0;
+  return User.countDocuments();
 }

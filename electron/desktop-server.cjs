@@ -103,33 +103,30 @@ async function stopServer() {
   stopping = false;
 }
 
-// Provision the metadata database + schema by reusing scripts/setup-db.js as a child.
-// dotenv/config only fills variables that are not already set, so our injected
-// MYSQL_* env wins over any committed .env.
-async function provisionSchema() {
-  const env = { ...process.env, ...desktopConfig.metadataEnv(), ELECTRON_RUN_AS_NODE: '1' };
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'setup-db.js')], {
-      cwd: PROJECT_ROOT,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let out = '';
-    child.stdout.on('data', (d) => (out += d.toString()));
-    child.stderr.on('data', (d) => (out += d.toString()));
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`Schema provisioning failed (exit ${code}): ${out.trim() || 'see logs'}`));
-    });
-  });
+// Verify the product-data store (MongoDB) is reachable before launching the
+// Express server. The server also connects at boot and refuses to start if this
+// is unavailable, so this is an early catch that lets the user fix MONGODB_URI
+// in Settings instead of hitting a generic server-crash dialog.
+async function checkDatabase(timeoutMs = 10000) {
+  const uri = (desktopConfig.loadConfig().mongodbUri || 'mongodb://127.0.0.1:27017/traceiq').trim();
+  const mongoose = require('mongoose');
+  mongoose.set('strictQuery', true);
+  const conn = await mongoose.createConnection(uri, { serverSelectionTimeoutMS: timeoutMs }).asPromise();
+  await conn.close();
+  return { uri };
 }
+
+// Kept for callers that used to provision the local MySQL schema; now the data
+// store is MongoDB and no schema provisioning is needed, so this is just a
+// connectivity pre-flight.
+const provisionSchema = checkDatabase;
 
 module.exports = {
   startServer,
   stopServer,
   waitForServer,
   provisionSchema,
+  checkDatabase,
   isPortAvailable,
   healthCheckUrl,
 };

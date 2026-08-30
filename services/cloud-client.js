@@ -39,6 +39,16 @@ export class CloudClient {
     this.getToken = getToken;
   }
 
+  // Return a cloud client bound to a specific token (used by the local backend
+  // to act on behalf of an authenticated user whose JWT it captured).
+  forToken(token) {
+    return new CloudClient({
+      baseUrl: this.baseUrl,
+      getToken: () => token,
+      fetchImpl: this.fetchImpl,
+    });
+  }
+
   async request(method, path, { body, auth = true } = {}) {
     const headers = {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -88,7 +98,11 @@ export class CloudClient {
   }
 
   async deleteAccount() {
-    return this.request('DELETE', '/account');
+    return this.request('DELETE', '/account', { body: {} });
+  }
+
+  async updateAccount({ currentPassword, email, newPassword }) {
+    return this.request('PATCH', '/account', { body: { currentPassword, email, newPassword } });
   }
 
   /* ---------- Groq / block keys ---------- */
@@ -105,10 +119,18 @@ export class CloudClient {
     return this.request('POST', '/keys/verify', { body: { apiKey } });
   }
 
+  async getActiveGroqKey() {
+    return this.request('GET', '/keys/active');
+  }
+
   /* ---------- Saved connections ---------- */
 
   async listConnections() {
     return this.request('GET', '/connections');
+  }
+
+  async getConnection(id) {
+    return this.request('GET', `/connections/${encodeURIComponent(id)}`);
   }
 
   async createConnection({ name, host, port = 3306, user, password, useSsl = false }) {
@@ -147,6 +169,10 @@ export class CloudClient {
 
   async addFollowUp(id, question) {
     return this.request('POST', `/threads/${encodeURIComponent(id)}/messages`, { body: { question } });
+  }
+
+  async addAssistantMessage(id, content) {
+    return this.request('POST', `/threads/${encodeURIComponent(id)}/messages/assistant`, { body: { content } });
   }
 
   async deleteThread(id) {

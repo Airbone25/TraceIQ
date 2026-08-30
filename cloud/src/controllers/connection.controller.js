@@ -66,6 +66,19 @@ export async function createConnectionHandler(req, res) {
   }
 }
 
+export async function getConnectionByIdHandler(req, res) {
+  try {
+    const doc = await Connection.findOne({ _id: req.params.id, userId: req.userId });
+    if (!doc) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+    return res.json(toListItem(doc));
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to load connection');
+    return res.status(500).json({ error: 'Failed to load connection' });
+  }
+}
+
 export async function deleteConnectionHandler(req, res) {
   try {
     const result = await Connection.deleteOne({ _id: req.params.id, userId: req.userId });

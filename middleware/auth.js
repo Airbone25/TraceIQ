@@ -1,55 +1,61 @@
-import jwt from 'jsonwebtoken';
-import env from '../config/env.js';
+import { verifyAuthToken } from '../services/jwt.js';
 
 export const SESSION_COOKIE = 'tq_session';
 
-const TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
+// Local stateless JWT auth. The renderer holds the JWT in localStorage and
+// sends it as `Authorization: Bearer <token>`. Tokens are signed with APP_SECRET
+// and carry the user's Mongo ObjectId, so verification happens entirely in this
+// process (no cloud round-trip).
 
-function getSessionToken(req) {
-  const header = req.headers.cookie;
-  if (!header) return null;
-  for (const part of header.split(';')) {
-    const idx = part.indexOf('=');
-    if (idx === -1) continue;
-    if (part.slice(0, idx).trim() === SESSION_COOKIE) {
-      return decodeURIComponent(part.slice(idx + 1).trim());
-    }
-  }
+function getBearerToken(req) {
+  const header = req.headers.authorization || req.headers.Authorization || '';
+  if (header.startsWith('Bearer ')) return header.slice(7).trim();
+  if (header && header.trim()) return header.trim();
   return null;
 }
 
-export function signSessionToken(userId) {
-  return jwt.sign({ sub: userId }, env.APP_SECRET, { expiresIn: TOKEN_TTL_SECONDS });
-}
-
-export function verifySessionToken(token) {
-  const payload = jwt.verify(token, env.APP_SECRET);
-  return payload.sub;
-}
-
-export function setSessionCookie(res, userId) {
-  res.cookie(SESSION_COOKIE, signSessionToken(userId), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: TOKEN_TTL_SECONDS * 1000,
-    path: '/',
-  });
-}
-
-export function clearSessionCookie(res) {
-  res.clearCookie(SESSION_COOKIE, { path: '/' });
-}
-
-export function requireAuth(req, res, next) {
-  const token = getSessionToken(req);
+export async function requireAuth(req, res, next) {
+  const token = getBearerToken(req);
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
   try {
-    req.userId = verifySessionToken(token);
+    const payload = verifyAuthToken(token);
+    req.userId = String(payload.userId || payload.sub);
+    req.userToken = token;
     next();
   } catch {
     return res.status(401).json({ error: 'Session expired or invalid. Please sign in again.' });
   }
+}
+
+export async function optionalAuth(req, _res, next) {
+  const token = getBearerToken(req);
+  if (token) {
+    try {
+      const payload = verifyAuthToken(token);
+      req.userId = String(payload.userId || payload.sub);
+      req.userToken = token;
+    } catch {
+      /* ignore invalid optional token */
+    }
+  }
+  next();
+}
+
+// Kept for compatibility with the previous cookie flow; auth is Bearer JWT now.
+export async function signSessionToken() {
+  return null;
+}
+
+export async function verifySessionToken() {
+  return null;
+}
+
+export function setSessionCookie() {
+  /* no-op: auth is Bearer JWT now */
+}
+
+export function clearSessionCookie() {
+  /* no-op: auth is Bearer JWT now */
 }

@@ -13,11 +13,14 @@ const envSchema = z.object({
   APP_SECRET: z.string()
     .regex(/^[0-9a-fA-F]{64}$/, 'APP_SECRET must be a 64-character hex string (generate with: openssl rand -hex 32)')
     .default('9f2b7c4e1a8d5f30c6b9e2d4a7f10c385e60b92d4a7c1f83e6b05d294a7cf102'),
+  // Product data (users, keys, connections, threads, investigations) lives in
+  // MongoDB. Accepts either a MongoDB Atlas URI or a self-hosted mongodb:// URI.
+  MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/traceiq'),
   MYSQL_HOST: z.string().default('localhost'),
   MYSQL_PORT: z.coerce.number().int().positive().default(3306),
-  MYSQL_USER: z.string().min(1, 'MYSQL_USER is required'),
+  MYSQL_USER: z.string().default('root'),
   MYSQL_PASSWORD: z.string().default(''),
-  MYSQL_DATABASE: z.string().min(1, 'MYSQL_DATABASE is required'),
+  MYSQL_DATABASE: z.string().default('traceiq'),
   MYSQL_SSL: z.preprocess(
     (v) => {
       if (typeof v === 'string') return v.toLowerCase() === 'true' || v === '1';
@@ -58,6 +61,9 @@ if (!parsed.success) {
 const env = parsed.data;
 if (!process.env.APP_SECRET && process.env.NODE_ENV !== 'test') {
   console.warn('WARNING: APP_SECRET not set - using insecure default. Set it in .env (openssl rand -hex 32) before storing any connection credentials.');
+}
+if (!process.env.MONGODB_URI && process.env.NODE_ENV !== 'test') {
+  console.warn('WARNING: MONGODB_URI not set - defaulting to mongodb://127.0.0.1:27017/traceiq. Set MONGODB_URI in .env to point at your MongoDB (Atlas or self-hosted).');
 }
 
 export default env;

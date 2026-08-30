@@ -7,6 +7,7 @@ const DEFAULTS = {
   groqApiKey: '',
   groqModel: 'openai/gpt-oss-120b',
   appSecret: '',
+  mongodbUri: 'mongodb://127.0.0.1:27017/traceiq',
   serverPort: 39101,
   metadata: {
     mysqlHost: '127.0.0.1',
@@ -128,6 +129,7 @@ function toEnv() {
     GROQ_API_KEY: cfg.groqApiKey || 'traceiq-desktop-placeholder',
     GROQ_MODEL: cfg.groqModel || 'openai/gpt-oss-120b',
     APP_SECRET: cfg.appSecret,
+    MONGODB_URI: cfg.mongodbUri || DEFAULTS.mongodbUri,
     MYSQL_HOST: cfg.metadata.mysqlHost || '127.0.0.1',
     MYSQL_PORT: String(cfg.metadata.mysqlPort || 3306),
     MYSQL_USER: cfg.metadata.mysqlUser || 'root',

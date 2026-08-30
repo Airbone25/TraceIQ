@@ -10,6 +10,13 @@ vi.mock('../middleware/auth.js', () => ({
   SESSION_COOKIE: 'tq_session',
 }));
 
+vi.mock('../database/mongodb.js', () => ({
+  connectDb: vi.fn().mockResolvedValue({}),
+  closeDb: vi.fn().mockResolvedValue(),
+  testDbConnection: vi.fn().mockResolvedValue(true),
+  mongoose: {},
+}));
+
 vi.mock('../database/investigation-store.js', () => ({
   createInvestigation: vi.fn().mockResolvedValue({ id: 'test-id', startedAt: new Date() }),
   addStep: vi.fn().mockResolvedValue(),

@@ -1,4 +1,4 @@
-import { getGroqStatus, upsertGroqKey, verifyGroqKey } from '../services/groq.service.js';
+import { getGroqStatus, upsertGroqKey, verifyGroqKey, decryptActiveGroqKey } from '../services/groq.service.js';
 import { logger } from '../utils/logger.js';
 
 export async function getGroqHandler(req, res) {
@@ -27,4 +27,18 @@ export async function verifyGroqHandler(req, res) {
   const result = await verifyGroqKey(apiKey);
   if (result.ok) return res.json({ ok: true, model: result.model });
   return res.status(400).json({ ok: false, error: result.error });
+}
+
+// Returns the decrypted active Groq key + model so the LOCAL agent can call
+// Groq on the user's behalf. Only reachable by an authenticated request; the
+// plaintext key must never be sent to a browser-facing endpoint.
+export async function getActiveGroqKeyHandler(req, res) {
+  try {
+    const cfg = await decryptActiveGroqKey(req.userId);
+    if (!cfg) return res.status(404).json({ error: 'No Groq key configured' });
+    return res.json(cfg);
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to load active Groq key');
+    return res.status(500).json({ error: 'Failed to load Groq key', detail: err.message });
+  }
 }

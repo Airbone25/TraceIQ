@@ -147,6 +147,12 @@ npm start
 
 The server starts on `http://localhost:3001`. Open it in a browser for the built-in investigation dashboard.
 
+### Product data (MongoDB)
+
+Your account, Groq key, saved connections, threads and investigations are stored in MongoDB via `MONGODB_URI` (an Atlas connection string or a self-hosted `mongodb://` URI works identically). For local development the default `mongodb://127.0.0.1:27017/traceiq` is fine.
+
+For any shared or remote host, **enable MongoDB authentication** and include the credentials in the URI, e.g. `mongodb://USER:PASS@host:27017/traceiq`. Don't expose an unauthenticated instance: this store holds users' connection passwords and Groq API keys (encrypted at rest with `APP_SECRET`), which should not be readable by anyone who can reach the database.
+
 ## Desktop App (Electron)
 
 TraceIQ ships as a desktop app so you can run investigations without git/npm/self‑hosting friction. The actual agent and Express server still run entirely on your machine, bound to `127.0.0.1` only — there is no cloud backend.

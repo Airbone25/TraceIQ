@@ -1,5 +1,18 @@
 const POLL_INTERVAL_MS = 2000;
 const NEAR_BOTTOM_THRESHOLD_PX = 80;
+const AUTH_TOKEN_KEY = 'tq_cloud_token';
+
+function getAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch { return null; }
+}
+function setAuthToken(token) {
+  try {
+    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+    else localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch { /* storage unavailable */ }
+}
 
 const els = {
   appLayout: document.getElementById('app-layout'),
@@ -74,9 +87,12 @@ let state = {
 };
 
 async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const token = getAuthToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok && res.status !== 409) {
@@ -152,6 +168,7 @@ async function performLogout() {
     els.logoutConfirm.textContent = origText || 'Sign out';
   }
   showToast('Signed out', 'ok');
+  setAuthToken(null);
   sessionExpired();
 }
 
@@ -188,6 +205,11 @@ function enterApp() {
 }
 
 async function initSession() {
+  if (!getAuthToken()) {
+    updateSidebarUser(null);
+    showAuthView();
+    return;
+  }
   try {
     const { body } = await api('/auth/me');
     updateSidebarUser(body);
@@ -197,6 +219,7 @@ async function initSession() {
     }
     enterApp();
   } catch {
+    setAuthToken(null);
     updateSidebarUser(null);
     showAuthView();
   }
@@ -218,13 +241,14 @@ async function submitAuth(event) {
   }
   els.authSubmit.disabled = true;
   try {
-    await api(path, {
+    const { body: authBody } = await api(path, {
       method: 'POST',
       body: JSON.stringify({
         email: els.authEmail.value.trim(),
         password: els.authPassword.value,
       }),
     });
+    if (authBody && authBody.token) setAuthToken(authBody.token);
     const { body } = await api('/auth/me');
     updateSidebarUser(body);
     if (body.groqConfigured === false) {

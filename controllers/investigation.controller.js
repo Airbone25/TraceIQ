@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { testConnection } from '../database/mysql.js';
+import { testDbConnection } from '../database/mongodb.js';
 import { getInvestigation, listInvestigations, createInvestigation } from '../database/investigation-store.js';
 import { getConnectionRow, touchConnection } from '../database/connection-store.js';
 import { validateDatabaseName } from './connections.controller.js';
@@ -25,7 +25,7 @@ export function validateQuestion(req) {
 }
 
 export async function healthCheck(req, res) {
-  const dbOk = await testConnection();
+  const dbOk = await testDbConnection();
   const status = dbOk ? 200 : 503;
   res.status(status).json({
     status: dbOk ? 'ok' : 'degraded',

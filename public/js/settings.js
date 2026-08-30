@@ -25,9 +25,13 @@ const els = {
 };
 
 async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  let token = null;
+  try { token = localStorage.getItem('tq_cloud_token'); } catch { /* storage unavailable */ }
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
@@ -250,6 +254,7 @@ els.logoutBtn.addEventListener('click', async () => {
   btn.setAttribute('data-loading', 'true');
   btn.innerHTML = '<span class="signout-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span> Signing out…';
   try { await api('/auth/logout', { method: 'POST' }); } catch {}
+  try { localStorage.removeItem('tq_cloud_token'); } catch {}
   showToast('Signed out', 'ok');
   setTimeout(() => { location.href = '/'; }, 400);
 });
