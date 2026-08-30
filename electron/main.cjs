@@ -53,7 +53,7 @@ function isAllowedNavigation(url) {
   if (url.startsWith('file:')) {
     const p = url.replace('file://', '').split('?')[0];
     const base = path.basename(p);
-    return base === 'first-run.html' || base === 'settings.html';
+    return base === 'settings.html';
   }
   const host = url.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
   return host === '127.0.0.1' || host === 'localhost';
@@ -65,12 +65,7 @@ function openExternalSafe(url) {
   shell.openExternal(url).catch(() => {});
 }
 
-// ---------- First-run / Settings pages ----------
-
-function loadFirstRun() {
-  mainWindow.loadFile(path.join(__dirname, 'desktop', 'first-run.html'));
-  mainWindow.setTitle('TraceIQ — Setup');
-}
+// ---------- Settings pages ----------
 
 function openSettings() {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
@@ -215,48 +210,6 @@ ipcMain.handle('desktop:get-config', () => {
   };
 });
 
-async function handleSaveFirstRun(_e, payload) {
-  payload = payload || {};
-  const key = String(payload.groqApiKey || '').trim();
-  if (!key) {
-    return { ok: false, error: 'A Groq API key is required.' };
-  }
-  const current = desktopConfig.loadConfig();
-  const next = {
-    ...current,
-    groqApiKey: key,
-    groqModel: String(payload.groqModel || current.groqModel || 'openai/gpt-oss-120b').trim(),
-    metadata: {
-      mysqlHost: String(payload.mysqlHost || current.metadata.mysqlHost || '127.0.0.1'),
-      mysqlPort: parseInt(payload.mysqlPort || current.metadata.mysqlPort || '3306', 10),
-      mysqlUser: String(payload.mysqlUser || current.metadata.mysqlUser || 'root'),
-      mysqlPassword: String(payload.mysqlPassword || current.metadata.mysqlPassword || ''),
-      mysqlDatabase: String(payload.mysqlDatabase || current.metadata.mysqlDatabase || 'traceiq'),
-      mysqlUseSsl: Boolean(payload.mysqlUseSsl ?? payload.mysqlSsl ?? current.metadata.mysqlUseSsl),
-      mysqlSslRejectUnauthorized: payload.mysqlSslRejectUnauthorized != null ? Boolean(payload.mysqlSslRejectUnauthorized) : (current.metadata.mysqlSslRejectUnauthorized ?? true),
-    },
-  };
-  desktopConfig.saveConfig(next);
-
-  // Validate the metadata MySQL connection right away by provisioning the schema.
-  try {
-    await desktopServer.provisionSchema();
-  } catch (err) {
-    return { ok: false, error: `Could not reach the metadata MySQL database:\n${err.message}` };
-  }
-  desktopServer.startServer();
-  try {
-    await desktopServer.waitForServer(25000);
-  } catch (err) {
-    await desktopServer.stopServer();
-    return { ok: false, error: `Server failed to start after saving: ${err.message}` };
-  }
-  mainWindow.setTitle('TraceIQ');
-  mainWindow.loadURL(`http://127.0.0.1:${desktopConfig.loadConfig().serverPort}/`);
-  return { ok: true };
-}
-ipcMain.handle('desktop:save-first-run', handleSaveFirstRun);
-
 ipcMain.handle('desktop:save-settings', async (_e, payload) => {
   payload = payload || {};
   const current = desktopConfig.loadConfig();
@@ -386,19 +339,14 @@ app.whenReady().then(async () => {
   mainWindow = createMainWindow();
   mainWindow.loadFile(path.join(__dirname, 'desktop', 'loading.html'));
 
-  if (desktopConfig.isConfigured()) {
-    mainWindow.webContents.once('did-finish-load', () => bootApp());
-  } else {
-    mainWindow.webContents.once('did-finish-load', () => loadFirstRun());
-  }
+  mainWindow.webContents.once('did-finish-load', () => bootApp());
 
   setupAutoUpdater();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = createMainWindow();
-      if (desktopConfig.isConfigured()) bootApp();
-      else loadFirstRun();
+      bootApp();
     }
   });
 });

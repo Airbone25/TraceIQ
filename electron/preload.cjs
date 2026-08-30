@@ -8,9 +8,6 @@ contextBridge.exposeInMainWorld('traceiqDesktop', {
   getUserDataPath: () => ipcRenderer.invoke('desktop:get-user-data-path'),
   getConfigState: () => ipcRenderer.invoke('desktop:get-config'),
 
-  // First-run
-  saveFirstRun: (payload) => ipcRenderer.invoke('desktop:save-first-run', payload),
-
   // Settings
   saveSettings: (payload) => ipcRenderer.invoke('desktop:save-settings', payload),
   openUserDataFolder: () => ipcRenderer.invoke('desktop:open-user-data-folder'),

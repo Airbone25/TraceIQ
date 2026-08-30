@@ -97,7 +97,10 @@ function toEnv() {
     // silently fail to persist. 'desktop' keeps dotenv loading benign and the
     // cookie non-secure.
     NODE_ENV: 'desktop',
-    GROQ_API_KEY: cfg.groqApiKey,
+    // Per-account Groq keys are now stored in the users table and injected per
+    // request. env requires a non-empty GROQ_API_KEY to boot, so we inject a
+    // placeholder here; it is overridden by the account's real key at call time.
+    GROQ_API_KEY: cfg.groqApiKey || 'traceiq-desktop-placeholder',
     GROQ_MODEL: cfg.groqModel || 'openai/gpt-oss-120b',
     APP_SECRET: cfg.appSecret,
     MYSQL_HOST: cfg.metadata.mysqlHost || '127.0.0.1',

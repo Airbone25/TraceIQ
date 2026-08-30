@@ -17,11 +17,6 @@
     label { display:block; font-size:12.5px; color:var(--dim); margin:12px 0 5px; font-weight:600; }
     input { width:100%; background:var(--field); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 12px; font-size:14px; font-family:inherit; }
     input:focus { outline:none; border-color:var(--accent); }
-    .row { display:flex; gap:10px; }
-    .row > div { flex:1; }
-    .hint a { color:var(--accent); text-decoration:none; }
-    .hint a:hover { text-decoration:underline; }
-    .key-blank { color:var(--warn); font-size:12.5px; }
     .meta { font-size:13px; line-height:1.7; color:var(--dim); }
     .meta code { background:var(--field); padding:1px 6px; border-radius:5px; font-size:12px; }
     .warn { margin-top:12px; padding:11px 13px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25); border-radius:10px; font-size:12.5px; color:var(--dim); line-height:1.5; }
@@ -38,39 +33,11 @@
 </head>
 <body>
   <h1>TraceIQ Settings</h1>
-  <p class="sub">Connection details for the local agent &amp; metadata store.</p>
-
-  <section>
-    <h2>Groq API key</h2>
-    <p>Used by the agent to run investigations. Never sent anywhere except directly to Groq.</p>
-    <label id="key-label">API key (currently blank)</label>
-    <input id="groq-key" type="password" placeholder="Leave blank to keep the current key" autocomplete="off">
-    <p class="hint"><a href="#" id="groq-link">Get a key at console.groq.com</a></p>
-    <div style="margin-top:12px">
-      <label for="groq-model">Default model</label>
-      <input id="groq-model" type="text" placeholder="openai/gpt-oss-120b">
-    </div>
-  </section>
-
-  <section>
-    <h2>MySQL (app data)</h2>
-    <p>Stores accounts, threads and saved connections. We re-provision the <code>traceiq</code> database &amp; schema automatically.</p>
-    <label for="mysql-host">Host</label>
-    <input id="mysql-host" type="text">
-    <div class="row">
-      <div><label for="mysql-port">Port</label><input id="mysql-port" type="number"></div>
-      <div><label for="mysql-db">Database</label><input id="mysql-db" type="text"></div>
-    </div>
-    <label for="mysql-user">Username</label>
-    <input id="mysql-user" type="text">
-    <label for="mysql-password">Password</label>
-    <input id="mysql-password" type="password" autocomplete="off">
-    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:400;cursor:pointer"><input id="mysql-ssl" type="checkbox" style="width:auto"> Use SSL (required for PlanetScale / Railway / Aiven cloud MySQL)</label>
-  </section>
+  <p class="sub">Local app preferences. Your account, Groq key and saved connections are managed inside the app from the gear menu.</p>
 
   <section>
     <h2>Server port</h2>
-    <p>The local background server. Set this lower pick &gt; on the fixed default if 39101 is taken.</p>
+    <p>The local background server that powers the app. On the rare case 39101 is taken, you can pick a different one here.</p>
     <input id="server-port" type="number" value="39101">
   </section>
 
@@ -96,25 +63,11 @@
     const $ = (id) => document.getElementById(id);
     const desktop = window.traceiqDesktop;
 
-    $('groq-link').addEventListener('click', (e) => { e.preventDefault(); desktop.openExternal('https://console.groq.com'); });
     $('open-folder').addEventListener('click', () => desktop.openUserDataFolder());
     $('cancel').addEventListener('click', () => window.close());
 
     async function load() {
       const cfg = await desktop.getConfigState();
-      if (cfg.groqKey && cfg.groqKey.has) {
-        $('key-label').textContent = 'API key (currently ' + cfg.groqKey.masked + ' — leave blank to keep)';
-      } else {
-        $('key-label').textContent = 'API key (currently blank)';
-        $('key-label').classList.add('key-blank');
-      }
-      $('groq-model').value = cfg.groqModel || '';
-      $('mysql-host').value = cfg.metadata.mysqlHost || '';
-      $('mysql-port').value = cfg.metadata.mysqlPort || 3306;
-      $('mysql-db').value = cfg.metadata.mysqlDatabase || '';
-      $('mysql-user').value = cfg.metadata.mysqlUser || '';
-      const sslEl = document.getElementById('mysql-ssl');
-      if (sslEl) sslEl.checked = Boolean(cfg.metadata.mysqlUseSsl);
       $('server-port').value = cfg.serverPort || 39101;
       $('meta').innerHTML =
         'Version: <code>' + (cfg.version || '?') + '</code><br>' +
@@ -126,17 +79,7 @@
       st.textContent = 'Applying…'; st.className = 'status';
       btn.disabled = true;
       const payload = {
-        groqApiKey: $('groq-key').value,
-        groqModel: $('groq-model').value,
         serverPort: $('server-port').value,
-        metadata: {
-          mysqlHost: $('mysql-host').value,
-          mysqlPort: $('mysql-port').value,
-          mysqlUser: $('mysql-user').value,
-          mysqlPassword: $('mysql-password').value,
-          mysqlDatabase: $('mysql-db').value,
-          mysqlUseSsl: document.getElementById('mysql-ssl')?.checked || false,
-        },
       };
       const res = await desktop.saveSettings(payload);
       if (res && res.ok) {
