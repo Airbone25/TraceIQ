@@ -62,6 +62,24 @@ async function migrate(conn) {
     );
     logger.info('Migration applied: db_connections.last_used_at');
   }
+  if (!(await columnExists(conn, 'users', 'groq_api_key'))) {
+    await conn.execute(
+      'ALTER TABLE users ADD COLUMN groq_api_key VARCHAR(255) NULL AFTER password_hash'
+    );
+    logger.info('Migration applied: users.groq_api_key');
+  }
+  if (!(await columnExists(conn, 'users', 'groq_model'))) {
+    await conn.execute(
+      'ALTER TABLE users ADD COLUMN groq_model VARCHAR(120) NULL AFTER groq_api_key'
+    );
+    logger.info('Migration applied: users.groq_model');
+  }
+  if (!(await columnExists(conn, 'users', 'groq_configured'))) {
+    await conn.execute(
+      'ALTER TABLE users ADD COLUMN groq_configured TINYINT(1) NOT NULL DEFAULT 0 AFTER groq_model'
+    );
+    logger.info('Migration applied: users.groq_configured');
+  }
 }
 
 async function setup() {

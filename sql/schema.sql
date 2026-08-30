@@ -134,6 +134,9 @@ CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(36) PRIMARY KEY,
   email VARCHAR(255) NOT NULL,
   password_hash VARCHAR(100) NOT NULL,
+  groq_api_key VARCHAR(255) NULL,
+  groq_model VARCHAR(120) NULL,
+  groq_configured TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
   UNIQUE KEY uq_users_email (email)

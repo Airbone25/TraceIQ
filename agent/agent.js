@@ -37,11 +37,12 @@ const CACHED_TOOLS = new Set(['get_schema', 'get_overview']);
 const LIMIT_REACHED_MESSAGE = 'Investigation reached step/timeout limit. Partial results may be available in the step history.';
 const SYNTHESIS_PROMPT = 'Your investigation budget is exhausted. Based ONLY on the evidence already gathered in this conversation, write your final answer now in the required format (Conclusion / Key Evidence / Confidence). Do not attempt any further tool calls.';
 
-async function forceFinalSynthesis(messages, state) {
+async function forceFinalSynthesis(messages, state, chatOpts = {}) {
   try {
     logger.info('Investigation budget exhausted; forcing final synthesis');
     const response = await chatCompletion({
       messages: [...messages, { role: 'user', content: SYNTHESIS_PROMPT }],
+      ...chatOpts,
     });
     recordLlmCall(state, response);
     const content = response.message?.content?.trim();
@@ -104,9 +105,13 @@ export async function runInvestigation(userQuestion, options = {}) {
     threadContext = [],
     connectionId = null,
     database = null,
+    groqConfig = null,
   } = options;
   const state = createAgentState(userQuestion);
   let investigationId = existingId;
+  const chatOpts = groqConfig && groqConfig.apiKey
+    ? { apiKey: groqConfig.apiKey, model: groqConfig.model || undefined }
+    : { model: groqConfig && groqConfig.model ? groqConfig.model : undefined };
 
   try {
     if (!investigationId) {
@@ -164,7 +169,7 @@ export async function runInvestigation(userQuestion, options = {}) {
       }
 
       messages = compressHistory(messages);
-      const response = await chatCompletion({ messages, tools: toolDefs });
+      const response = await chatCompletion({ messages, tools: toolDefs, ...chatOpts });
       recordLlmCall(state, response);
 
       messages.push(response.message);
@@ -255,7 +260,7 @@ export async function runInvestigation(userQuestion, options = {}) {
     }
 
     if (state.status === 'running') {
-      const synthesized = await forceFinalSynthesis(messages, state);
+      const synthesized = await forceFinalSynthesis(messages, state, chatOpts);
       markCompleted(state, synthesized || LIMIT_REACHED_MESSAGE);
     }
 

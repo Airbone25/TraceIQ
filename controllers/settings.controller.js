@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { getGroqStatus, getAppConfig, updateGroqConfig, verifyGroqKey } from '../services/settings.service.js';
+import { getGroqStatus, getAppConfig, updateGroqConfig, updateAccountGroqConfig, verifyGroqKey } from '../services/settings.service.js';
 import { getUserById, getUserByEmail, verifyPassword, updateUserEmail, updateUserPassword, deleteUser } from '../database/user-store.js';
 import { clearSessionCookie } from '../middleware/auth.js';
 
@@ -11,7 +11,7 @@ export async function getSettingsHandler(req, res) {
   try {
     const user = await getUserById(req.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const groq = getGroqStatus();
+    const groq = await getGroqStatus(req.userId);
     const app = getAppConfig();
     res.json({
       groq,
@@ -26,7 +26,7 @@ export async function getSettingsHandler(req, res) {
 
 export async function getGroqHandler(req, res) {
   try {
-    res.json(getGroqStatus());
+    res.json(await getGroqStatus(req.userId));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -41,7 +41,7 @@ export async function updateGroqHandler(req, res) {
     return res.status(400).json({ error: 'Provide apiKey and/or model to update' });
   }
   try {
-    const result = await updateGroqConfig({ apiKey: key, model: mdl });
+    const result = await updateAccountGroqConfig(req.userId, { apiKey: key, model: mdl });
     logger.info({ userId: req.userId, model: mdl ? String(mdl).slice(0, 40) : undefined, keyUpdated: Boolean(key && String(key).trim()) }, 'Groq config updated');
     res.json({ ok: true, groq: result });
   } catch (err) {

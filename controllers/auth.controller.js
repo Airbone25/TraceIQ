@@ -76,7 +76,12 @@ export async function meHandler(req, res) {
       clearSessionCookie(res);
       return res.status(401).json({ error: 'Account no longer exists' });
     }
-    res.json(user);
+    res.json({
+      id: user.id,
+      email: user.email,
+      created_at: user.created_at,
+      groqConfigured: Number(user.groq_configured) === 1,
+    });
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to load session user');
     res.status(500).json({ error: 'Failed to load account', detail: err.message });

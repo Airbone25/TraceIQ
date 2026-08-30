@@ -25,8 +25,30 @@ export async function getUserByEmail(email) {
 }
 
 export async function getUserById(id) {
-  const rows = await query('SELECT id, email, created_at FROM users WHERE id = ?', [id]);
+  const rows = await query('SELECT id, email, groq_configured, created_at FROM users WHERE id = ?', [id]);
   return rows.length > 0 ? rows[0] : null;
+}
+
+export async function getUserGroqConfig(id) {
+  const rows = await query('SELECT groq_api_key, groq_model, groq_configured FROM users WHERE id = ?', [id]);
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  return {
+    apiKey: row.groq_api_key,
+    model: row.groq_model,
+    configured: Number(row.groq_configured) === 1,
+  };
+}
+
+export async function setUserGroqConfig(id, { apiKey, model }) {
+  const current = (await getUserGroqConfig(id)) || {};
+  const nextKey = apiKey != null && String(apiKey).trim() !== '' ? String(apiKey).trim() : current.apiKey;
+  const nextModel = model != null && String(model).trim() !== '' ? String(model).trim() : (current.model || null);
+  await query(
+    'UPDATE users SET groq_api_key = ?, groq_model = ?, groq_configured = 1 WHERE id = ?',
+    [nextKey, nextModel, id]
+  );
+  return { configured: true, hasKey: Boolean(nextKey), model: nextModel || null };
 }
 
 export async function verifyPassword(plainText, passwordHash) {

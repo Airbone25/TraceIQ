@@ -62,12 +62,12 @@ function getRetryDelay(attempt, err) {
   return BASE_DELAY_MS * Math.pow(2, attempt) + jitter;
 }
 
-export async function chatCompletion({ messages, tools, temperature = 0.1 }) {
+export async function chatCompletion({ messages, tools, temperature = 0.1, apiKey, model }) {
   const requestStart = Date.now();
-  const model = env.GROQ_MODEL;
+  const effectiveModel = model || env.GROQ_MODEL;
 
   const params = {
-    model,
+    model: effectiveModel,
     messages,
     temperature,
     max_tokens: env.LLM_MAX_TOKENS,
@@ -85,7 +85,7 @@ export async function chatCompletion({ messages, tools, temperature = 0.1 }) {
     params.tool_choice = 'auto';
   }
 
-  logger.debug({ messageCount: messages.length, hasTools: !!tools?.length, model }, 'Calling Groq API');
+  logger.debug({ messageCount: messages.length, hasTools: !!tools?.length, model: effectiveModel }, 'Calling Groq API');
 
   let lastError = null;
 
@@ -109,7 +109,8 @@ export async function chatCompletion({ messages, tools, temperature = 0.1 }) {
     }
 
     try {
-      const response = await getClient().chat.completions.create(params);
+      const client = apiKey ? new Groq({ apiKey }) : getClient();
+      const response = await client.chat.completions.create(params);
 
       const requestEnd = Date.now();
       const duration = requestEnd - requestStart;
@@ -129,7 +130,7 @@ export async function chatCompletion({ messages, tools, temperature = 0.1 }) {
         finishReason: choice?.finish_reason,
         usage: response.usage,
         duration,
-        model,
+        model: effectiveModel,
         requestStart,
         requestEnd,
         toolCallCount: choice?.message?.tool_calls?.length || 0,

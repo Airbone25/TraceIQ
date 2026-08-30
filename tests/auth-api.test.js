@@ -101,7 +101,7 @@ describe('Auth API', () => {
       const me = await request(app).get('/api/auth/me').set('Cookie', extractSessionCookie(login));
 
       expect(me.status).toBe(200);
-      expect(me.body).toEqual({ id: 'user-1', email: 'a@b.com' });
+      expect(me.body).toMatchObject({ id: 'user-1', email: 'a@b.com', groqConfigured: false });
     });
 
     it('should return 401 without a cookie', async () => {

@@ -87,6 +87,7 @@ describe('Threads API', () => {
         investigationId: 'inv-new',
         question: 'Why did orders drop?',
         threadId: 'thread-new',
+        userId: 'user-1',
       });
     });
 

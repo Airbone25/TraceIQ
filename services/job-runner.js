@@ -3,13 +3,14 @@ import { runInvestigation } from '../agent/agent.js';
 import { investigationRateLimiter } from '../llm/rate-limiter.js';
 import { finalizeInvestigation } from '../database/investigation-store.js';
 import { addMessage, getThread } from '../database/thread-store.js';
+import { getUserGroqConfig } from '../database/user-store.js';
 
 const logger = pino({ name: 'job-runner' });
 
 const activeJobs = new Map();
 
-export function startJob({ investigationId, question, threadId = null, threadContext = [] }) {
-  const promise = executeJob({ investigationId, question, threadId, threadContext })
+export function startJob({ investigationId, question, threadId = null, threadContext = [], userId = null }) {
+  const promise = executeJob({ investigationId, question, threadId, threadContext, userId })
     .catch(err => {
       logger.error({ err: err.message, investigationId }, 'Background job crashed');
     })
@@ -26,7 +27,7 @@ export function activeJobCount() {
   return activeJobs.size;
 }
 
-async function executeJob({ investigationId, question, threadId, threadContext }) {
+async function executeJob({ investigationId, question, threadId, threadContext, userId }) {
   try {
     await investigationRateLimiter.acquire();
   } catch (err) {
@@ -45,7 +46,16 @@ async function executeJob({ investigationId, question, threadId, threadContext }
         database = thread.target_database || null;
       }
     }
-    const result = await runInvestigation(question, { investigationId, threadId, threadContext, connectionId, database });
+    let groqConfig = null;
+    if (userId) {
+      const cfg = await getUserGroqConfig(userId).catch(() => null);
+      if (cfg && cfg.apiKey) {
+        groqConfig = { apiKey: cfg.apiKey, model: cfg.model || null };
+      }
+    }
+    const runOpts = { investigationId, threadId, threadContext, connectionId, database };
+    if (groqConfig) runOpts.groqConfig = groqConfig;
+    const result = await runInvestigation(question, runOpts);
     if (threadId && result.status === 'completed' && result.answer) {
       const thread = await getThread(threadId).catch(() => null);
       if (thread) {

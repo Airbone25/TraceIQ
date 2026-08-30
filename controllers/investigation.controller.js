@@ -44,7 +44,7 @@ export async function investigate(req, res) {
   try {
     const { id } = await createInvestigation(question, null, req.userId);
     res.status(202).json({ investigationId: id, status: 'queued' });
-    startJob({ investigationId: id, question });
+    startJob({ investigationId: id, question, userId: req.userId });
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to queue investigation');
     res.status(500).json({ error: 'Failed to queue investigation', detail: err.message });

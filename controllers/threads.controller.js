@@ -56,7 +56,7 @@ export async function createThreadHandler(req, res) {
     const { id: investigationId } = await createInvestigation(question, thread.id, req.userId);
 
     res.status(202).json({ threadId: thread.id, investigationId, status: 'queued', connectionId, database });
-    startJob({ investigationId, question, threadId: thread.id });
+    startJob({ investigationId, question, threadId: thread.id, userId: req.userId });
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to create thread');
     res.status(500).json({ error: 'Failed to create thread', detail: err.message });
@@ -93,7 +93,7 @@ export async function addFollowUpMessage(req, res) {
     const { id: investigationId } = await createInvestigation(question, id, req.userId);
 
     res.status(202).json({ threadId: id, investigationId, status: 'queued' });
-    startJob({ investigationId, question, threadId: id, threadContext });
+    startJob({ investigationId, question, threadId: id, threadContext, userId: req.userId });
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to queue follow-up');
     res.status(500).json({ error: 'Failed to queue follow-up', detail: err.message });

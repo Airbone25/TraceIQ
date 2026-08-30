@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import pino from 'pino';
 import env from '../config/env.js';
 import { resetClient } from '../llm/groq.js';
+import { getUserGroqConfig, setUserGroqConfig } from '../database/user-store.js';
 
 const logger = pino({ name: 'settings-service' });
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,13 +17,15 @@ function maskKey(value) {
   return `••••••••${value.slice(-4)}`;
 }
 
-export function getGroqStatus() {
-  const key = env.GROQ_API_KEY || process.env.GROQ_API_KEY || '';
+export async function getGroqStatus(userId) {
+  const account = userId ? await getUserGroqConfig(userId) : null;
+  const key = (account && account.apiKey) || env.GROQ_API_KEY || process.env.GROQ_API_KEY || '';
   return {
     hasKey: Boolean(key && key.trim()),
+    configured: Boolean(account && account.configured),
     masked: key ? maskKey(key) : '',
     keyLength: key ? key.length : 0,
-    model: env.GROQ_MODEL || process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+    model: (account && account.model) || env.GROQ_MODEL || process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
     // don't expose full key
   };
 }
@@ -166,6 +169,30 @@ export async function updateGroqConfig({ apiKey, model }) {
   // Optional live validation if key was changed: do a lightweight probe
   // We don't fail the save on validation error, just warn — caller can call /verify separately.
   return getGroqStatus();
+}
+
+export async function updateAccountGroqConfig(userId, { apiKey, model } = {}) {
+  const updates = {};
+  if (apiKey != null && String(apiKey).trim() !== '') {
+    const trimmed = String(apiKey).trim();
+    if (trimmed.length < 10) throw new Error('Groq API key looks too short');
+    updates.apiKey = trimmed;
+  }
+  if (model != null && String(model).trim() !== '') {
+    const trimmedModel = String(model).trim();
+    if (trimmedModel.length > 120) throw new Error('Model name too long');
+    updates.model = trimmedModel;
+  }
+  if (Object.keys(updates).length === 0) {
+    throw new Error('No changes provided');
+  }
+  const result = await setUserGroqConfig(userId, updates);
+  resetClient();
+  return {
+    configured: result.configured,
+    hasKey: result.hasKey,
+    model: result.model || env.GROQ_MODEL || 'openai/gpt-oss-120b',
+  };
 }
 
 export async function verifyGroqKey(apiKey) {
