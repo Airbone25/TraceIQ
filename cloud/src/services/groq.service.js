@@ -53,7 +53,7 @@ export async function upsertGroqKey(userId, { apiKey, model } = {}) {
 
   let key = await GroqKey.findOne({ userId, name: 'default' });
   if (!key) {
-    key = await GroqKey.create({ userId, name: 'default', apiKeyEnc: '', active: true });
+    key = await GroqKey.create({ userId, name: 'default', active: true });
   }
   if (updates.apiKeyEnc) key.apiKeyEnc = updates.apiKeyEnc;
   if (updates.model) key.model = updates.model;
@@ -62,7 +62,11 @@ export async function upsertGroqKey(userId, { apiKey, model } = {}) {
 
   await User.updateOne({ _id: userId }, { $set: { groqConfigured: true } });
 
-  const plain = updates.apiKeyEnc ? String(apiKey).trim() : decryptSecret(key.apiKeyEnc);
+  const plain = updates.apiKeyEnc
+    ? String(apiKey).trim()
+    : key.apiKeyEnc
+      ? decryptSecret(key.apiKeyEnc)
+      : '';
   return {
     configured: true,
     hasKey: Boolean(plain),

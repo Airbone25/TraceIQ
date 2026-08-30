@@ -6,7 +6,7 @@ const groqKeySchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     name: { type: String, default: 'default' },
-    apiKeyEnc: { type: String, required: true },
+    apiKeyEnc: { type: String, default: null },
     model: { type: String, default: null },
     active: { type: Boolean, default: true },
   },
