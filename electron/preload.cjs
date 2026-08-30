@@ -19,4 +19,5 @@ contextBridge.exposeInMainWorld('traceiqDesktop', {
 
   // Server status for the settings page
   getServerStatus: () => ipcRenderer.invoke('desktop:server-status'),
+  checkForUpdates: () => ipcRenderer.invoke('desktop:check-for-updates'),
 });

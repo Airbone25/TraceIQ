@@ -18,6 +18,21 @@ const envSchema = z.object({
   MYSQL_USER: z.string().min(1, 'MYSQL_USER is required'),
   MYSQL_PASSWORD: z.string().default(''),
   MYSQL_DATABASE: z.string().min(1, 'MYSQL_DATABASE is required'),
+  MYSQL_SSL: z.preprocess(
+    (v) => {
+      if (typeof v === 'string') return v.toLowerCase() === 'true' || v === '1';
+      return Boolean(v);
+    },
+    z.boolean().default(false)
+  ),
+  MYSQL_SSL_REJECT_UNAUTHORIZED: z.preprocess(
+    (v) => {
+      if (v == null || v === '') return true;
+      if (typeof v === 'string') return !(v.toLowerCase() === 'false' || v === '0');
+      return Boolean(v);
+    },
+    z.boolean().default(true)
+  ),
   MAX_AGENT_STEPS: z.coerce.number().int().positive().default(8),
   MAX_SQL_QUERIES: z.coerce.number().int().positive().default(5),
   MAX_QUERY_ROWS: z.coerce.number().int().positive().default(500),

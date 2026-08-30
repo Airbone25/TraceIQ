@@ -168,9 +168,28 @@ npm run desktop
 ### Package installers
 
 ```bash
-npm run desktop:dist   # builds installers into release/
-npm run desktop:pack   # unpacked app for quick testing
+npm run desktop:dist        # builds for current OS into release/
+npm run desktop:dist:win    # Windows NSIS (x64) — primary, tested
+npm run desktop:dist:linux  # Linux AppImage (x64) — run on Ubuntu/Debian
+npm run desktop:dist:mac    # macOS dmg (x64+arm64) — requires macOS host
+npm run desktop:pack        # unpacked app for quick local test
 ```
+
+**Windows:** Tested. NSIS installer `release/TraceIQ Setup *.exe` (non-oneClick, choosable directory). No icon required — uses Electron default.
+
+**Linux/mac — how to set up:**
+- *Linux:* `npm run desktop:dist:linux` on Ubuntu 22+ (`libarchive-tools` installed). Produces `TraceIQ-*.AppImage` (portable) — mark executable `chmod +x` and run. For `deb` add `"deb"` to `build.linux.target` (requires `fakeroot`). No code change.
+- *mac:* `npm run desktop:dist:mac` **must run on macOS** (GitHub `macos-latest` runner). Requires `CSC_LINK` (p12) + `APPLE_ID` notarization secrets for distribution outside App Store. The `mac` config in `package.json:build.mac` already targets `dmg` for `x64`+`arm64`. Build on Windows/Linux will fail for `mac` — use CI.
+
+**GitHub public release + auto-update:**
+- `package.json:build.publish` points to `Airbone25/TraceIQ` via `electron-updater`. Push a tag `git tag v1.0.1 && git push origin v1.0.1` — `.github/workflows/release.yml` builds `win` (and optionally `linux`/`mac` when uncommented) and publishes `release/*.exe` + `latest.yml` to Releases.
+- Client `electron/main.cjs` checks `autoUpdater.checkForUpdatesAndNotify()` 5s after boot + every 6h, prompts `Restart` when downloaded. Works only in packaged builds (`app.isPackaged`). Provide `GH_TOKEN` automatically via `secrets.GITHUB_TOKEN`; no extra setup.
+- Manual publish: `npm run desktop:publish` (Windows) or `desktop:publish:all` (needs all runners). For local test without publish use `desktop:dist:*`.
+
+**Cloud MySQL (metadata) — free tier:**
+- **MySQL:** `Railway`, `PlanetScale`, `Aiven Free`, `TiDB Serverless`, `FreeSQL` all work. In `Settings` / `.env` set `MYSQL_HOST/PORT/USER/PASSWORD/DATABASE`; tick **Use SSL** (or `.env` `MYSQL_SSL=true`) for PlanetScale/Railway/Aiven. Pool `database/mysql.js` enables TLS `rejectUnauthorized:true` (override with `MYSQL_SSL_REJECT_UNAUTHORIZED=false` for self-signed).
+- Electron stores cloud host in `%APPDATA%\traceiq\config.json` via `electron/desktop-config.cjs:90` and provisions schema automatically on first launch (`desktop-server.cjs:109`).
+- **Neon** is Postgres-only — not compatible with this `mysql2` metadata pool. Keep MySQL for zero-code deploy.
 
 Config file location (Windows): `%APPDATA%\traceiq\config.json`.
 

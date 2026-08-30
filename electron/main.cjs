@@ -3,6 +3,10 @@ const path = require('path');
 const fs = require('fs');
 const desktopConfig = require('./desktop-config.cjs');
 const desktopServer = require('./desktop-server.cjs');
+let autoUpdater = null;
+try {
+  ({ autoUpdater } = require('electron-updater'));
+} catch { /* electron-updater not installed in dev */ }
 
 let mainWindow = null;
 let settingsWindow = null;
@@ -189,6 +193,15 @@ ipcMain.handle('desktop:relaunch', () => {
 ipcMain.handle('desktop:server-status', () => {
   return { configured: desktopConfig.isConfigured(), port: desktopConfig.loadConfig().serverPort };
 });
+ipcMain.handle('desktop:check-for-updates', async () => {
+  if (!autoUpdater || !app.isPackaged) return { ok: false, error: 'Auto-update only in packaged build' };
+  try {
+    const res = await autoUpdater.checkForUpdatesAndNotify();
+    return { ok: true, version: res?.updateInfo?.version || null };
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+});
 ipcMain.handle('desktop:get-config', () => {
   const cfg = desktopConfig.loadConfig();
   return {
@@ -219,6 +232,8 @@ async function handleSaveFirstRun(_e, payload) {
       mysqlUser: String(payload.mysqlUser || current.metadata.mysqlUser || 'root'),
       mysqlPassword: String(payload.mysqlPassword || current.metadata.mysqlPassword || ''),
       mysqlDatabase: String(payload.mysqlDatabase || current.metadata.mysqlDatabase || 'traceiq'),
+      mysqlUseSsl: Boolean(payload.mysqlUseSsl ?? payload.mysqlSsl ?? current.metadata.mysqlUseSsl),
+      mysqlSslRejectUnauthorized: payload.mysqlSslRejectUnauthorized != null ? Boolean(payload.mysqlSslRejectUnauthorized) : (current.metadata.mysqlSslRejectUnauthorized ?? true),
     },
   };
   desktopConfig.saveConfig(next);
@@ -261,6 +276,8 @@ ipcMain.handle('desktop:save-settings', async (_e, payload) => {
       mysqlUser: String(payload.metadata.mysqlUser || current.metadata.mysqlUser),
       mysqlPassword: String(payload.metadata.mysqlPassword != null ? payload.metadata.mysqlPassword : current.metadata.mysqlPassword),
       mysqlDatabase: String(payload.metadata.mysqlDatabase || current.metadata.mysqlDatabase),
+      mysqlUseSsl: Boolean(payload.metadata.mysqlUseSsl ?? current.metadata.mysqlUseSsl),
+      mysqlSslRejectUnauthorized: payload.metadata.mysqlSslRejectUnauthorized != null ? Boolean(payload.metadata.mysqlSslRejectUnauthorized) : (current.metadata.mysqlSslRejectUnauthorized ?? true),
     };
   }
   desktopConfig.saveConfig(next);
@@ -328,6 +345,36 @@ function buildMenu() {
   // Menu.setApplicationMenu(null);
 }
 
+// ---------- Auto-update (GitHub Releases) ----------
+
+function setupAutoUpdater() {
+  if (!autoUpdater || !app.isPackaged) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', () => {
+    console.log('[updater] update available');
+  });
+  autoUpdater.on('update-downloaded', () => {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Update ready',
+      message: 'A new version of TraceIQ has been downloaded.',
+      detail: 'Restart now to apply the update?',
+      buttons: ['Restart', 'Later'],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) autoUpdater.quitAndInstall();
+    });
+  });
+  autoUpdater.on('error', (err) => {
+    console.log('[updater] error:', err?.message || err);
+  });
+  // Check 5s after boot, then every 6h
+  setTimeout(() => autoUpdater.checkForUpdatesAndNotify().catch(() => {}), 5000);
+  setInterval(() => autoUpdater.checkForUpdatesAndNotify().catch(() => {}), 6 * 60 * 60 * 1000);
+}
+
 // ---------- Lifecycle ----------
 
 app.whenReady().then(async () => {
@@ -344,6 +391,8 @@ app.whenReady().then(async () => {
   } else {
     mainWindow.webContents.once('did-finish-load', () => loadFirstRun());
   }
+
+  setupAutoUpdater();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -14,6 +14,8 @@ const DEFAULTS = {
     mysqlUser: 'root',
     mysqlPassword: '',
     mysqlDatabase: 'traceiq',
+    mysqlUseSsl: false,
+    mysqlSslRejectUnauthorized: true,
   },
   limits: {},
 };
@@ -103,6 +105,8 @@ function toEnv() {
     MYSQL_USER: cfg.metadata.mysqlUser || 'root',
     MYSQL_PASSWORD: cfg.metadata.mysqlPassword || '',
     MYSQL_DATABASE: cfg.metadata.mysqlDatabase || 'traceiq',
+    MYSQL_SSL: cfg.metadata.mysqlUseSsl ? 'true' : 'false',
+    MYSQL_SSL_REJECT_UNAUTHORIZED: cfg.metadata.mysqlSslRejectUnauthorized === false ? 'false' : 'true',
   };
   for (const [key, envKey] of Object.entries(METADATA_LIMIT_KEYS)) {
     const val = cfg.limits && cfg.limits[key];
@@ -124,6 +128,8 @@ function metadataEnv() {
     MYSQL_USER: cfg.metadata.mysqlUser || 'root',
     MYSQL_PASSWORD: cfg.metadata.mysqlPassword || '',
     MYSQL_DATABASE: cfg.metadata.mysqlDatabase || 'traceiq',
+    MYSQL_SSL: cfg.metadata.mysqlUseSsl ? 'true' : 'false',
+    MYSQL_SSL_REJECT_UNAUTHORIZED: cfg.metadata.mysqlSslRejectUnauthorized === false ? 'false' : 'true',
   };
 }
 

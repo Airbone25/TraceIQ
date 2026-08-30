@@ -11,6 +11,11 @@
     "desktop": "electron electron/main.cjs",
     "desktop:pack": "electron-builder --dir",
     "desktop:dist": "electron-builder",
+    "desktop:dist:win": "electron-builder --win --publish never",
+    "desktop:dist:linux": "electron-builder --linux --publish never",
+    "desktop:dist:mac": "electron-builder --mac --publish never",
+    "desktop:publish": "electron-builder --win --publish always",
+    "desktop:publish:all": "electron-builder -mwl --publish always",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:setup": "node scripts/setup-db.js",
@@ -64,17 +69,56 @@
     "extraMetadata": {
       "main": "electron/main.cjs"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Airbone25",
+        "repo": "TraceIQ",
+        "private": false
+      }
+    ],
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TraceIQ"
     },
     "directories": {
       "output": "release"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Development"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools"
     }
   },
   "keywords": [
@@ -84,9 +128,14 @@
     "mysql"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Airbone25/TraceIQ.git"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.7",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "groq-sdk": "^0.15.0",
     "jsonwebtoken": "^9.0.3",

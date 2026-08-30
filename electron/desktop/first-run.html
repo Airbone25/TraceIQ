@@ -59,6 +59,7 @@
     <input id="mysql-user" type="text" value="root">
     <label for="mysql-password">Password</label>
     <input id="mysql-password" type="password" value="" autocomplete="off">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:400;cursor:pointer;font-size:13px;color:var(--dim)"><input id="mysql-ssl" type="checkbox" style="width:auto"> Use SSL (PlanetScale / Railway / Aiven)</label>
 
     <div class="error" id="error"></div>
     <div class="actions">
@@ -86,6 +87,7 @@
         mysqlUser: $('mysql-user').value,
         mysqlPassword: $('mysql-password').value,
         mysqlDatabase: $('mysql-db').value,
+        mysqlUseSsl: document.getElementById('mysql-ssl')?.checked || false,
       };
       const res = await window.traceiqDesktop.saveFirstRun(payload);
       if (res && res.ok) return; // window navigates to app on success

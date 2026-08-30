@@ -65,6 +65,7 @@
     <input id="mysql-user" type="text">
     <label for="mysql-password">Password</label>
     <input id="mysql-password" type="password" autocomplete="off">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:400;cursor:pointer"><input id="mysql-ssl" type="checkbox" style="width:auto"> Use SSL (required for PlanetScale / Railway / Aiven cloud MySQL)</label>
   </section>
 
   <section>
@@ -112,6 +113,8 @@
       $('mysql-port').value = cfg.metadata.mysqlPort || 3306;
       $('mysql-db').value = cfg.metadata.mysqlDatabase || '';
       $('mysql-user').value = cfg.metadata.mysqlUser || '';
+      const sslEl = document.getElementById('mysql-ssl');
+      if (sslEl) sslEl.checked = Boolean(cfg.metadata.mysqlUseSsl);
       $('server-port').value = cfg.serverPort || 39101;
       $('meta').innerHTML =
         'Version: <code>' + (cfg.version || '?') + '</code><br>' +
@@ -132,6 +135,7 @@
           mysqlUser: $('mysql-user').value,
           mysqlPassword: $('mysql-password').value,
           mysqlDatabase: $('mysql-db').value,
+          mysqlUseSsl: document.getElementById('mysql-ssl')?.checked || false,
         },
       };
       const res = await desktop.saveSettings(payload);

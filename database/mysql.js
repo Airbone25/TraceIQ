@@ -8,6 +8,10 @@ let pool = null;
 
 export function getPool() {
   if (!pool) {
+    const ssl = env.MYSQL_SSL
+      ? { rejectUnauthorized: env.MYSQL_SSL_REJECT_UNAUTHORIZED }
+      : undefined;
+    if (ssl) logger.info({ rejectUnauthorized: ssl.rejectUnauthorized }, 'MySQL SSL enabled for pool');
     pool = mysql.createPool({
       host: env.MYSQL_HOST,
       port: env.MYSQL_PORT,
@@ -19,6 +23,7 @@ export function getPool() {
       queueLimit: 0,
       enableKeepAlive: true,
       keepAliveInitialDelay: 0,
+      ...(ssl ? { ssl } : {}),
     });
     logger.info('Connection pool created');
   }

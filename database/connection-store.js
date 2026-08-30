@@ -71,13 +71,26 @@ export async function deleteConnection(id, userId = null) {
   return false;
 }
 
+function ephemeralSslFor(creds) {
+  // Use global MYSQL_SSL for cloud targets (e.g., PlanetScale/Railway/Aiven) but not localhost.
+  const sslFlag = process.env.MYSQL_SSL;
+  const enabled = sslFlag && (sslFlag.toLowerCase() === 'true' || sslFlag === '1');
+  if (!enabled) return undefined;
+  if (creds.host === 'localhost' || creds.host === '127.0.0.1') return undefined;
+  const rejectRaw = process.env.MYSQL_SSL_REJECT_UNAUTHORIZED;
+  const reject = rejectRaw == null || rejectRaw === '' ? true : !(rejectRaw.toLowerCase() === 'false' || rejectRaw === '0');
+  return { rejectUnauthorized: reject };
+}
+
 async function withEphemeralConnection(creds, fn) {
+  const ssl = ephemeralSslFor(creds);
   const conn = await mysql.createConnection({
     host: creds.host,
     port: creds.port,
     user: creds.user,
     password: creds.password,
     connectTimeout: 10000,
+    ...(ssl ? { ssl } : {}),
   });
   try {
     return await fn(conn);
