@@ -117,7 +117,8 @@ The core design enforces a strict separation of concerns: the LLM never directly
 ## Prerequisites
 
 - **Node.js** >= 20
-- **MySQL** >= 8.0 (running locally or accessible remotely)
+- **MongoDB** (a running instance, default `mongodb://127.0.0.1:27017`) to store accounts and product data
+- **MySQL** >= 8.0 (running locally or accessible remotely) — the databases the agent investigates
 - **Groq API key** ([get one free](https://console.groq.com))
 
 ## Quick Start
@@ -130,12 +131,13 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env with your MySQL credentials and Groq API key
+# Edit .env with your MongoDB URI, Groq API key, and MySQL settings
 
-# 3. Create database and schema
+# 3. Point the app at a MongoDB (or use the default local instance). The app
+#    creates its own data store on first boot — no manual schema setup needed.
+
+# 4. (Optional) Set up and seed a MySQL database you want to investigate
 npm run db:setup
-
-# 4. Seed with sample data
 npm run db:seed
 
 # 5. Run tests
@@ -147,20 +149,20 @@ npm start
 
 The server starts on `http://localhost:3001`. Open it in a browser for the built-in investigation dashboard.
 
-### Product data (MongoDB)
+### Data store (MongoDB)
 
-Your account, Groq key, saved connections, threads and investigations are stored in MongoDB via `MONGODB_URI` (an Atlas connection string or a self-hosted `mongodb://` URI works identically). For local development the default `mongodb://127.0.0.1:27017/traceiq` is fine.
+Your account, Groq key, saved connections, threads and investigations are stored in MongoDB via `MONGODB_URI` (a standard `mongodb://` connection string). For local development the default `mongodb://127.0.0.1:27017/traceiq` is fine.
 
 For any shared or remote host, **enable MongoDB authentication** and include the credentials in the URI, e.g. `mongodb://USER:PASS@host:27017/traceiq`. Don't expose an unauthenticated instance: this store holds users' connection passwords and Groq API keys (encrypted at rest with `APP_SECRET`), which should not be readable by anyone who can reach the database.
 
 ## Desktop App (Electron)
 
-TraceIQ ships as a desktop app so you can run investigations without git/npm/self‑hosting friction. The actual agent and Express server still run entirely on your machine, bound to `127.0.0.1` only — there is no cloud backend.
+TraceIQ ships as a desktop app so you can run investigations without git/npm/self‑hosting friction. The agent and Express server run entirely on your machine, bound to `127.0.0.1` only; your account and data are stored in the MongoDB the app is pointed at.
 
-- On first launch you see the **Login / Sign up** screen. Your account is created in TraceIQ's metadata store (a pre‑configured **cloud MySQL**, not editable in the UI).
-- The first time you log into an account, a short setup screen asks for your **Groq API key only** (model is fixed server‑side). The key is validated before you enter the app and stored per‑account in the metadata store; the default model is not user‑editable.
-- **Settings** (in‑app gear icon, or the macOS app menu) lets you update your password/email and re‑enter/re‑verify your Groq key. The desktop settings window only offers the server port, an "Open user data folder" action, and version/about info.
-- Cloud MySQL details, the per‑account Groq key, and the auto‑generated `APP_SECRET` are stored per‑machine/account and never committed to the repo.
+- On first launch you see the **Login / Sign up** screen. Your account is stored in the app's data store (MongoDB), not edited in the UI.
+- The first time you log into an account, a short setup screen asks for your **Groq API key only** (model is fixed server‑side). The key is validated before you enter the app and stored per‑account in the data store; the default model is not user‑editable.
+- **Settings** (in‑app gear icon, or the macOS app menu) lets you update your password/email and re‑enter/re‑verify your Groq key. The desktop settings window also lets you set the MongoDB URI and the server port, plus offers an "Open user data folder" action and version/about info.
+- Your Groq key and the auto‑generated `APP_SECRET` are stored per‑machine/account and never committed to the repo.
 - External links (e.g. the Groq console) always open in your system browser. The renderer runs with `nodeIntegration: false`, `contextIsolation: true`, and a sandboxed preload.
 - For investigation connections you add inside the app, always use a MySQL user with **read‑only** privileges.
 
@@ -192,11 +194,6 @@ npm run desktop:pack        # unpacked app for quick local test
 - Client `electron/main.cjs` checks `autoUpdater.checkForUpdatesAndNotify()` 5s after boot + every 6h, prompts `Restart` when downloaded. Works only in packaged builds (`app.isPackaged`). Provide `GH_TOKEN` automatically via `secrets.GITHUB_TOKEN`; no extra setup.
 - Manual publish: `npm run desktop:publish` (Windows) or `desktop:publish:all` (needs all runners). For local test without publish use `desktop:dist:*`.
 
-**Cloud MySQL (metadata) — free tier:**
-- **MySQL:** `Railway`, `PlanetScale`, `Aiven Free`, `TiDB Serverless`, `FreeSQL` all work. TraceIQ ships pre‑configured for cloud MySQL (SSL on, `rejectUnauthorized:true`); the connection is wired via `desktop/config.json` (under `%APPDATA%\traceiq\`) and placeholders — drop in your real host/credentials there or in `.env`, no UI toggles. Pool `database/mysql.js` enables TLS `rejectUnauthorized:true` (`MYSQL_SSL_REJECT_UNAUTHORIZED=false` for self‑signed).
-- The schema is provisioned automatically on server boot (`desktop-server.cjs`).
-- **Neon** is Postgres-only — not compatible with this `mysql2` metadata pool. Keep MySQL for zero-code deploy.
-
 Config file location (Windows): `%APPDATA%\traceiq\config.json`.
 
 ```json
@@ -204,6 +201,7 @@ Config file location (Windows): `%APPDATA%\traceiq\config.json`.
   "groqApiKey": "gsk_...",
   "groqModel": "openai/gpt-oss-120b",
   "appSecret": "<auto-generated 64-char hex>",
+  "mongodbUri": "mongodb://127.0.0.1:27017/traceiq",
   "serverPort": 39101,
   "metadata": {
     "mysqlHost": "127.0.0.1",
@@ -215,6 +213,8 @@ Config file location (Windows): `%APPDATA%\traceiq\config.json`.
   "limits": { "maxAgentSteps": 8 }
 }
 ```
+
+`mongodbUri` is where your account and product data are stored; `metadata.*` is the optional MySQL server you point investigations at (used by the seed/setup and evaluation scripts).
 
 ### API Endpoints
 
@@ -281,13 +281,14 @@ All configuration is via environment variables (loaded from `.env`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GROQ_API_KEY` | *required* | Fallback Groq API key. Per-account keys stored in the users table override this per-request |
+| `GROQ_API_KEY` | *required* | Fallback Groq API key. Per-account keys stored in the data store override this per-request |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | LLM model to use |
-| `MYSQL_HOST` | `localhost` | MySQL host |
-| `MYSQL_PORT` | `3306` | MySQL port |
-| `MYSQL_USER` | *required* | MySQL username |
-| `MYSQL_PASSWORD` | *(empty)* | MySQL password |
-| `MYSQL_DATABASE` | *required* | Database name (default: `traceiq`) |
+| `MONGODB_URI` | `mongodb://127.0.0.1:27017/traceiq` | Where accounts and product data are stored |
+| `MYSQL_HOST` | `localhost` | Target MySQL host (seed/eval only) |
+| `MYSQL_PORT` | `3306` | Target MySQL port |
+| `MYSQL_USER` | `root` | Target MySQL username |
+| `MYSQL_PASSWORD` | *(empty)* | Target MySQL password |
+| `MYSQL_DATABASE` | `traceiq` | Target MySQL database |
 | `MAX_AGENT_STEPS` | `8` | Max reasoning steps per investigation |
 | `MAX_SQL_QUERIES` | `5` | Max SQL queries per investigation |
 | `MAX_QUERY_ROWS` | `500` | Max rows returned per query |
