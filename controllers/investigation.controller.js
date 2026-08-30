@@ -1,6 +1,8 @@
 import pino from 'pino';
 import { testConnection } from '../database/mysql.js';
 import { getInvestigation, listInvestigations, createInvestigation } from '../database/investigation-store.js';
+import { getConnectionRow, touchConnection } from '../database/connection-store.js';
+import { validateDatabaseName } from './connections.controller.js';
 import { startJob } from '../services/job-runner.js';
 import env from '../config/env.js';
 
@@ -39,12 +41,32 @@ export async function investigate(req, res) {
   }
   const question = validation.value;
 
-  logger.info({ question }, 'Investigation requested');
+  const connectionId = req.body?.connectionId;
+  const database = req.body?.database;
+  if (!connectionId || !validateDatabaseName(database)) {
+    return res.status(400).json({
+      error: 'connectionId and a valid database name are required to target an external database',
+      received: { connectionId: connectionId ?? null, database: database ?? null },
+    });
+  }
+
+  try {
+    const connection = await getConnectionRow(connectionId, req.userId);
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+    await touchConnection(connectionId).catch(() => {});
+  } catch (err) {
+    logger.info({ err: err.message }, 'Investigation target unavailable');
+    return res.status(502).json({ error: 'Could not resolve the investigation target', detail: err.message });
+  }
+
+  logger.info({ question, connectionId, database }, 'Investigation requested');
 
   try {
     const { id } = await createInvestigation(question, null, req.userId);
-    res.status(202).json({ investigationId: id, status: 'queued' });
-    startJob({ investigationId: id, question, userId: req.userId });
+    res.status(202).json({ investigationId: id, status: 'queued', connectionId, database });
+    startJob({ investigationId: id, question, connectionId, database, userId: req.userId });
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to queue investigation');
     res.status(500).json({ error: 'Failed to queue investigation', detail: err.message });
