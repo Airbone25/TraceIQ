@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
+import http from 'http';
+import { notify } from '../services/notifier.js';
 
 const mocks = vi.hoisted(() => ({
   createThread: vi.fn().mockResolvedValue({ id: 'thread-new', title: 'Q?' }),
@@ -17,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   listInvestigations: vi.fn().mockResolvedValue([]),
   failOrphanedInvestigations: vi.fn().mockResolvedValue(0),
   startJob: vi.fn(),
+  cancelJob: vi.fn().mockReturnValue(true),
 }));
 
 vi.mock('../middleware/auth.js', () => ({
@@ -51,6 +54,7 @@ vi.mock('../database/investigation-store.js', () => ({
 
 vi.mock('../services/job-runner.js', () => ({
   startJob: mocks.startJob,
+  cancelJob: mocks.cancelJob,
 }));
 
 import app from '../src/server.js';
@@ -196,6 +200,95 @@ describe('Threads API', () => {
       mocks.deleteThread.mockResolvedValue(false);
       const res = await request(app).delete('/api/threads/nope');
       expect(res.status).toBe(404);
+    });
+
+    it('should cancel the active run before deleting the thread', async () => {
+      mocks.getThreadRuns.mockResolvedValue([{ id: 'inv-active', status: 'running' }]);
+      mocks.deleteThread.mockResolvedValue(true);
+      const res = await request(app).delete('/api/threads/t1');
+      expect(res.status).toBe(204);
+      expect(mocks.cancelJob).toHaveBeenCalledWith('inv-active');
+      expect(mocks.deleteThread).toHaveBeenCalledWith('t1', 'user-1');
+    });
+
+    it('should not attempt to cancel non-running runs before deleting', async () => {
+      mocks.getThreadRuns.mockResolvedValue([{ id: 'inv-done', status: 'completed' }]);
+      mocks.deleteThread.mockResolvedValue(true);
+      const res = await request(app).delete('/api/threads/t1');
+      expect(res.status).toBe(204);
+      expect(mocks.cancelJob).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /api/investigations/:id/cancel', () => {
+    it('should return 404 when the investigation is not found or not owned', async () => {
+      mocks.getInvestigation.mockResolvedValue(null);
+      const res = await request(app).post('/api/investigations/ghost/cancel');
+      expect(res.status).toBe(404);
+      expect(mocks.cancelJob).not.toHaveBeenCalled();
+    });
+
+    it('should request cancellation and return 202 when the job is active', async () => {
+      mocks.getInvestigation.mockResolvedValue({ id: 'inv-1', status: 'running' });
+      mocks.cancelJob.mockReturnValue(true);
+      const res = await request(app).post('/api/investigations/inv-1/cancel');
+      expect(res.status).toBe(202);
+      expect(mocks.cancelJob).toHaveBeenCalledWith('inv-1');
+      expect(res.body).toMatchObject({ id: 'inv-1', status: 'cancelling', ok: true });
+    });
+
+    it('should be idempotent (200) when the job is no longer running', async () => {
+      mocks.getInvestigation.mockResolvedValue({ id: 'inv-2', status: 'cancelled' });
+      mocks.cancelJob.mockReturnValue(false);
+      const res = await request(app).post('/api/investigations/inv-2/cancel');
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ id: 'inv-2', status: 'cancelled', ok: true });
+    });
+  });
+
+  describe('GET /api/threads/:id/stream (SSE)', () => {
+    it('should open an event-stream, send a snapshot, then stream an update on notify', async () => {
+      mocks.getThread.mockResolvedValue({ id: 't-sse', title: 'A' });
+      mocks.getMessages.mockResolvedValue([{ role: 'user', content: 'Hi' }]);
+      mocks.getThreadRuns.mockResolvedValue([{ id: 'inv-1', status: 'running' }]);
+      mocks.getLatestRunSteps.mockResolvedValue([]);
+
+      const server = app.listen(0);
+      const port = server.address().port;
+      const url = `http://127.0.0.1:${port}/api/threads/t-sse/stream`;
+
+      const received = [];
+      await new Promise((resolve, reject) => {
+        const req = http.get(url, { headers: { Authorization: 'Bearer x' } }, (res) => {
+          expect(res.statusCode).toBe(200);
+          expect(res.headers['content-type']).toContain('text/event-stream');
+          res.setEncoding('utf8');
+          let buf = '';
+          res.on('data', (chunk) => {
+            buf += chunk;
+            const parts = buf.split('\n\n');
+            buf = parts.pop();
+            for (const p of parts) {
+              if (p.trim()) received.push(p);
+            }
+            if (received.length >= 1) {
+              notify('t-sse', { type: 'update' });
+            }
+            if (received.length >= 2) {
+              res.destroy();
+              resolve();
+            }
+          });
+          res.on('error', reject);
+        });
+        req.on('error', reject);
+      });
+      server.close();
+
+      const joined = received.join('\n\n');
+      expect(joined).toContain('event: snapshot');
+      expect(joined).toContain('event: update');
+      expect(joined).toContain('"id":"t-sse"');
     });
   });
 });

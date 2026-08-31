@@ -1,7 +1,7 @@
 import pino from 'pino';
 import env from '../config/env.js';
 import { buildSystemPrompt, buildStallMessage } from './prompts.js';
-import { createAgentState, canTakeStep, canRunSql, hasTimedOut, isDuplicateSql, recordToolCall, recordLlmCall, markCompleted, markFailed, shouldNudge, buildNudgeMessage } from './state.js';
+import { createAgentState, canTakeStep, canRunSql, hasTimedOut, isDuplicateSql, recordToolCall, recordLlmCall, markCompleted, markFailed, markCancelled, shouldNudge, buildNudgeMessage, isAborted } from './state.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { schemaTool } from '../tools/schema.tool.js';
 import { sqlTool } from '../tools/sql.tool.js';
@@ -10,6 +10,7 @@ import { chatCompletion, RateLimitError } from '../llm/groq.js';
 import { compressHistory } from './context.js';
 import { createInvestigation, addStep, finalizeInvestigation } from '../database/investigation-store.js';
 import { resolveExecutionContext } from '../services/target-context.js';
+import { notify } from '../services/notifier.js';
 
 const logger = pino({ name: 'agent' });
 
@@ -106,12 +107,16 @@ export async function runInvestigation(userQuestion, options = {}) {
     connectionId = null,
     database = null,
     groqConfig = null,
+    abortSignal = null,
+    shouldCancel = null,
   } = options;
   const state = createAgentState(userQuestion);
+  state.threadId = threadId;
   let investigationId = existingId;
   const chatOpts = groqConfig && groqConfig.apiKey
     ? { apiKey: groqConfig.apiKey, model: groqConfig.model || undefined }
     : { model: groqConfig && groqConfig.model ? groqConfig.model : undefined };
+  if (abortSignal) chatOpts.signal = abortSignal;
 
   try {
     if (!investigationId) {
@@ -154,6 +159,11 @@ export async function runInvestigation(userQuestion, options = {}) {
     let stallNudged = false;
 
     while (canTakeStep(state) && !hasTimedOut(state)) {
+      if (isAborted({ aborted: abortSignal?.aborted, shouldCancel })) {
+        logger.info({ investigationId }, 'Investigation cancelled by user');
+        markCancelled(state);
+        break;
+      }
       state.overheadDuration += Date.now() - lastToolBatchEnd;
 
       if (shouldNudge(state)) {
@@ -182,6 +192,7 @@ export async function runInvestigation(userQuestion, options = {}) {
 
       for (const toolCall of response.message.tool_calls) {
         if (!canTakeStep(state) || hasTimedOut(state)) break;
+        if (isAborted({ aborted: abortSignal?.aborted, shouldCancel })) break;
 
         const toolName = toolCall.function.name;
         if (toolName === 'execute_sql') {
@@ -260,8 +271,18 @@ export async function runInvestigation(userQuestion, options = {}) {
     }
 
     if (state.status === 'running') {
-      const synthesized = await forceFinalSynthesis(messages, state, chatOpts);
-      markCompleted(state, synthesized || LIMIT_REACHED_MESSAGE);
+      const wasAborted = isAborted({ aborted: abortSignal?.aborted, shouldCancel });
+      if (wasAborted) {
+        logger.info({ investigationId }, 'Investigation cancelled before synthesis');
+        markCancelled(state);
+      } else {
+        const synthesized = await forceFinalSynthesis(messages, state, chatOpts);
+        if (isAborted({ aborted: abortSignal?.aborted, shouldCancel })) {
+          markCancelled(state);
+        } else {
+          markCompleted(state, synthesized || LIMIT_REACHED_MESSAGE);
+        }
+      }
     }
 
     await finalizeInvestigation(investigationId, {
@@ -272,16 +293,23 @@ export async function runInvestigation(userQuestion, options = {}) {
       sqlQueries: state.sqlQueries,
       durationMs: state.totalDuration,
     });
+    notifyThread(threadId, { type: 'status', status: state.status, investigationId });
   } catch (err) {
-    logger.error({ err: err.message }, 'Agent error');
-    markFailed(state, err.message);
+    const wasCancelled = err?.name === 'AbortError' || isAborted({ aborted: abortSignal?.aborted, shouldCancel });
+    if (wasCancelled) {
+      logger.warn({ err: err.message }, 'Agent aborted');
+      markCancelled(state, 'Investigation cancelled');
+    } else {
+      logger.error({ err: err.message }, 'Agent error');
+      markFailed(state, err.message);
+    }
 
     if (investigationId) {
       try {
         await finalizeInvestigation(investigationId, {
-          status: 'failed',
+          status: state.status,
           answer: null,
-          error: err.message,
+          error: state.errors.join('; '),
           steps: state.steps,
           sqlQueries: state.sqlQueries,
           durationMs: state.totalDuration,
@@ -289,9 +317,10 @@ export async function runInvestigation(userQuestion, options = {}) {
       } catch (finalizeErr) {
         logger.error({ err: finalizeErr.message }, 'Failed to finalize investigation');
       }
+      notifyThread(threadId, { type: 'status', status: state.status, investigationId });
     }
 
-    if (err instanceof RateLimitError) {
+    if (!wasCancelled && err instanceof RateLimitError) {
       throw err;
     }
   }
@@ -316,9 +345,16 @@ export async function runInvestigation(userQuestion, options = {}) {
   };
 }
 
+function notifyThread(threadId, payload) {
+  if (threadId) {
+    notify(String(threadId), payload);
+  }
+}
+
 async function persistStep(investigationId, state, toolName, toolInput, result, duration) {
   try {
     await addStep(investigationId, state.steps, toolName, toolInput, result, duration);
+    notifyThread(state.threadId, { type: 'step', investigationId, stepNumber: state.steps });
   } catch (err) {
     logger.error({ err: err.message, investigationId }, 'Failed to persist step');
   }
