@@ -12,6 +12,11 @@ const fake = vi.hoisted(() => {
       email: data.email,
       passwordHash: data.passwordHash,
       groqConfigured: data.groqConfigured ?? false,
+      emailVerified: data.emailVerified ?? false,
+      otpCodeHash: data.otpCodeHash ?? null,
+      otpExpiresAt: data.otpExpiresAt ?? null,
+      otpAttempts: data.otpAttempts ?? 0,
+      otpResendAt: data.otpResendAt ?? null,
       created_at: data.created_at || null,
     };
   }
@@ -88,6 +93,10 @@ import {
   verifyPassword,
   getUserGroqConfig,
   setUserGroqConfig,
+  getUserVerification,
+  saveUserVerification,
+  markEmailVerified,
+  incrementOtpAttempts,
 } from '../database/user-store.js';
 
 describe('User Store (Mongoose)', () => {
@@ -137,5 +146,39 @@ describe('User Store (Mongoose)', () => {
     expect(cfg.configured).toBe(true);
     expect(cfg.apiKey).toBe('gsk_verysecret');
     expect(cfg.model).toBe('openai/gpt-oss-120b');
+  });
+
+  it('should create users unverified by default and expose email_verified in rows', async () => {
+    const created = await createUser({ email: 'verify@test.com', password: 'hunter2222' });
+    expect(created.emailVerified).toBe(false);
+    expect(fake.users[0].emailVerified).toBe(false);
+    const row = await getUserByEmail('verify@test.com');
+    expect(row.email_verified).toBe(false);
+  });
+
+  it('should persist and read back the verification record', async () => {
+    const created = await createUser({ email: 'otp@test.com', password: 'hunter2222' });
+    await saveUserVerification(created.id, { otpCodeHash: 'abc', otpAttempts: 0, otpResendAt: new Date() });
+    const v = await getUserVerification('otp@test.com');
+    expect(v.id).toBe(created.id);
+    expect(v.otpCodeHash).toBe('abc');
+    expect(v.emailVerified).toBe(false);
+  });
+
+  it('should mark a user verified and clear OTP fields', async () => {
+    const created = await createUser({ email: 'done@test.com', password: 'hunter2222' });
+    await saveUserVerification(created.id, { otpCodeHash: 'abc', otpAttempts: 2, otpResendAt: new Date() });
+    await markEmailVerified(created.id);
+    const doc = fake.users.find(u => u._id.toString() === created.id);
+    expect(doc.emailVerified).toBe(true);
+    expect(doc.otpCodeHash).toBeNull();
+    expect(doc.otpAttempts).toBe(0);
+  });
+
+  it('should update the attempt counter', async () => {
+    const created = await createUser({ email: 'attempt@test.com', password: 'hunter2222' });
+    await incrementOtpAttempts(created.id, 3);
+    const doc = fake.users.find(u => u._id.toString() === created.id);
+    expect(doc.otpAttempts).toBe(3);
   });
 });

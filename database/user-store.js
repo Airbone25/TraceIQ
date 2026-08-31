@@ -18,6 +18,7 @@ function toUserRow(doc, includeHash = false) {
     id: String(doc._id),
     email: doc.email,
     groq_configured: doc.groqConfigured,
+    email_verified: Boolean(doc.emailVerified),
     created_at: doc.created_at,
   };
   if (includeHash) row.password_hash = doc.passwordHash;
@@ -27,8 +28,8 @@ function toUserRow(doc, includeHash = false) {
 export async function createUser({ email, password }) {
   const normalizedEmail = email.trim().toLowerCase();
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const doc = await User.create({ email: normalizedEmail, passwordHash });
-  return { id: String(doc._id), email: normalizedEmail };
+  const doc = await User.create({ email: normalizedEmail, passwordHash, emailVerified: false });
+  return { id: String(doc._id), email: normalizedEmail, emailVerified: false };
 }
 
 export async function getUserByEmail(email) {
@@ -39,6 +40,39 @@ export async function getUserByEmail(email) {
 export async function getUserById(id) {
   const doc = await User.findById(id);
   return toUserRow(doc, false);
+}
+
+// Raw verification-state fetch for the OTP flow. Returns the fields needed to
+// validate a code (including the hash — not exposed over the API as a row).
+export async function getUserVerification(email) {
+  const doc = await User.findOne({ email: email.trim().toLowerCase() });
+  if (!doc) return null;
+  return {
+    id: String(doc._id),
+    email: doc.email,
+    password_hash: doc.passwordHash,
+    emailVerified: Boolean(doc.emailVerified),
+    otpCodeHash: doc.otpCodeHash || null,
+    otpExpiresAt: doc.otpExpiresAt || null,
+    otpAttempts: doc.otpAttempts || 0,
+    otpResendAt: doc.otpResendAt || null,
+  };
+}
+
+// Persist the verification record (OTP hash/expiry/attempts/resend window) for a user.
+export async function saveUserVerification(id, fields) {
+  await User.updateOne({ _id: id }, { $set: fields });
+}
+
+export async function markEmailVerified(id) {
+  await User.updateOne(
+    { _id: id },
+    { $set: { emailVerified: true, otpCodeHash: null, otpExpiresAt: null, otpAttempts: 0, otpResendAt: null } }
+  );
+}
+
+export async function incrementOtpAttempts(id, attempts) {
+  await User.updateOne({ _id: id }, { $set: { otpAttempts: attempts } });
 }
 
 export async function getUserGroqConfig(id) {

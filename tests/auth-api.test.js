@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   getUserByEmail: vi.fn(),
   getUserById: vi.fn(),
   verifyPassword: vi.fn(),
+  getUserVerification: vi.fn(),
+  saveUserVerification: vi.fn(),
+  markEmailVerified: vi.fn(),
+  incrementOtpAttempts: vi.fn(),
+  sendOtpEmail: vi.fn(),
 }));
 
 vi.mock('../database/user-store.js', () => ({
@@ -14,6 +19,14 @@ vi.mock('../database/user-store.js', () => ({
   getUserByEmail: mocks.getUserByEmail,
   getUserById: mocks.getUserById,
   verifyPassword: mocks.verifyPassword,
+  getUserVerification: mocks.getUserVerification,
+  saveUserVerification: mocks.saveUserVerification,
+  markEmailVerified: mocks.markEmailVerified,
+  incrementOtpAttempts: mocks.incrementOtpAttempts,
+}));
+
+vi.mock('../services/email.js', () => ({
+  sendOtpEmail: mocks.sendOtpEmail,
 }));
 
 vi.mock('../database/thread-store.js', () => ({
@@ -37,21 +50,37 @@ describe('Auth API (local JWT)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.createUser.mockResolvedValue({ id: 'user-new', email: 'a@b.com' });
-    mocks.getUserByEmail.mockResolvedValue({ id: 'u1', email: 'a@b.com', password_hash: '$2a$10$hash' });
-    mocks.getUserById.mockResolvedValue({ id: 'u1', email: 'a@b.com', groq_configured: false });
+    mocks.getUserByEmail.mockResolvedValue({ id: 'u1', email: 'a@b.com', password_hash: '$2a$10$hash', email_verified: true });
+    mocks.getUserById.mockResolvedValue({ id: 'u1', email: 'a@b.com', groq_configured: false, email_verified: true });
     mocks.verifyPassword.mockResolvedValue(true);
+    mocks.getUserVerification.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      password_hash: '$2a$10$hash',
+      emailVerified: true,
+      otpCodeHash: null,
+      otpExpiresAt: null,
+      otpAttempts: 0,
+      otpResendAt: null,
+    });
+    mocks.saveUserVerification.mockResolvedValue();
+    mocks.markEmailVerified.mockResolvedValue();
+    mocks.incrementOtpAttempts.mockResolvedValue();
+    mocks.sendOtpEmail.mockResolvedValue({ sent: true, dev: false });
   });
 
   describe('POST /api/auth/register', () => {
-    it('should create an account and return a JWT token', async () => {
+    it('should create an account, send an OTP, and NOT return a token until verified', async () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({ email: 'A@B.com', password: 'hunter2222' });
 
       expect(res.status).toBe(201);
       expect(mocks.createUser).toHaveBeenCalledWith({ email: 'A@B.com', password: 'hunter2222' });
-      expect(res.body.token).toBeTruthy();
-      expect(res.body).toMatchObject({ id: 'user-new', email: 'a@b.com', groqConfigured: false });
+      expect(mocks.saveUserVerification).toHaveBeenCalled();
+      expect(mocks.sendOtpEmail).toHaveBeenCalled();
+      expect(res.body.token).toBeUndefined();
+      expect(res.body).toMatchObject({ id: 'user-new', email: 'a@b.com', emailVerified: false, requiresVerification: true });
     });
 
     it('should reject invalid payloads with 400', async () => {
@@ -91,6 +120,80 @@ describe('Auth API (local JWT)', () => {
       mocks.getUserByEmail.mockResolvedValueOnce(null);
       const res = await request(app).post('/api/auth/login').send({ email: 'ghost@x.com', password: 'whatever1' });
       expect(res.status).toBe(401);
+    });
+
+    it('should return 403 and prompt verification when the email is not verified', async () => {
+      mocks.getUserByEmail.mockResolvedValueOnce({ id: 'u1', email: 'a@b.com', password_hash: '$2a$10$hash', email_verified: false });
+      const res = await request(app).post('/api/auth/login').send({ email: 'a@b.com', password: 'pw123456' });
+      expect(res.status).toBe(403);
+      expect(res.body.requiresVerification).toBe(true);
+      expect(res.body.token).toBeUndefined();
+    });
+  });
+
+  describe('POST /api/auth/verify-otp', () => {
+    function codeFor(userOverrides = {}) {
+      return {
+        id: 'u1',
+        email: 'a@b.com',
+        password_hash: '$2a$10$hash',
+        emailVerified: false,
+        otpCodeHash: null,
+        otpExpiresAt: new Date(Date.now() + 600000),
+        otpAttempts: 0,
+        otpResendAt: new Date(),
+        ...userOverrides,
+      };
+    }
+
+    it('should verify a correct code, mark verified, and issue a token', async () => {
+      const crypto = require('crypto');
+      const hash = crypto.createHash('sha256').update('123456').digest('hex');
+      mocks.getUserVerification.mockResolvedValueOnce(codeFor({ otpCodeHash: hash }));
+      const res = await request(app).post('/api/auth/verify-otp').send({ email: 'a@b.com', code: '123456' });
+      expect(res.status).toBe(200);
+      expect(mocks.markEmailVerified).toHaveBeenCalledWith('u1');
+      expect(res.body.ok).toBe(true);
+      expect(res.body.token).toBeTruthy();
+    });
+
+    it('should return 400 for an incorrect code and record an attempt', async () => {
+      const crypto = require('crypto');
+      const hash = crypto.createHash('sha256').update('111111').digest('hex');
+      mocks.getUserVerification.mockResolvedValueOnce(codeFor({ otpCodeHash: hash }));
+      const res = await request(app).post('/api/auth/verify-otp').send({ email: 'a@b.com', code: '999999' });
+      expect(res.status).toBe(400);
+      expect(mocks.incrementOtpAttempts).toHaveBeenCalled();
+      expect(res.body.token).toBeUndefined();
+    });
+
+    it('should return 410 once attempts exceed the limit', async () => {
+      mocks.getUserVerification.mockResolvedValueOnce(codeFor({ emailVerified: false, otpAttempts: 5 }));
+      const res = await request(app).post('/api/auth/verify-otp').send({ email: 'a@b.com', code: '999999' });
+      expect(res.status).toBe(410);
+      expect(res.body.requiresResend).toBe(true);
+    });
+  });
+
+  describe('POST /api/auth/resend-otp', () => {
+    it('should generate and send a new code', async () => {
+      mocks.getUserVerification.mockResolvedValueOnce({
+        id: 'u1', email: 'a@b.com', emailVerified: false,
+        otpResendAt: new Date(Date.now() - 600000), otpAttempts: 0, otpCodeHash: null, otpExpiresAt: null,
+      });
+      const res = await request(app).post('/api/auth/resend-otp').send({ email: 'a@b.com' });
+      expect(res.status).toBe(200);
+      expect(mocks.saveUserVerification).toHaveBeenCalled();
+      expect(mocks.sendOtpEmail).toHaveBeenCalled();
+    });
+
+    it('should return 429 if resent too quickly', async () => {
+      mocks.getUserVerification.mockResolvedValueOnce({
+        id: 'u1', email: 'a@b.com', emailVerified: false,
+        otpResendAt: new Date(Date.now() + 50000), otpAttempts: 0, otpCodeHash: null, otpExpiresAt: null,
+      });
+      const res = await request(app).post('/api/auth/resend-otp').send({ email: 'a@b.com' });
+      expect(res.status).toBe(429);
     });
   });
 

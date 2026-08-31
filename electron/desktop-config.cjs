@@ -34,6 +34,10 @@ const DEFAULTS = {
     mysqlSslRejectUnauthorized: true,
   },
   limits: {},
+  email: {
+    resendApiKey: '',
+    from: 'TraceIQ <onboarding@resend.dev>',
+  },
 };
 
 const METADATA_LIMIT_KEYS = {
@@ -154,6 +158,8 @@ function toEnv() {
     MYSQL_DATABASE: cfg.metadata.mysqlDatabase || 'traceiq',
     MYSQL_SSL: cfg.metadata.mysqlUseSsl ? 'true' : 'false',
     MYSQL_SSL_REJECT_UNAUTHORIZED: cfg.metadata.mysqlSslRejectUnauthorized === false ? 'false' : 'true',
+    RESEND_API_KEY: cfg.email?.resendApiKey || '',
+    EMAIL_FROM: cfg.email?.from || 'TraceIQ <onboarding@resend.dev>',
   };
   for (const [key, envKey] of Object.entries(METADATA_LIMIT_KEYS)) {
     const val = cfg.limits && cfg.limits[key];
