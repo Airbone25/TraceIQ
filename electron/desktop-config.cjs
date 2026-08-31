@@ -18,6 +18,22 @@ function loadDotenvMongodbUri() {
 }
 const DEFAULT_MONGODB_URI = loadDotenvMongodbUri();
 
+// Like MONGODB_URI/APP_SECRET, the Resend sender config is read from the repo's
+// .env (which is bundled into the package; see build.files ".env"). It falls
+// back to config.json values when present, so a build made with a real
+// RESEND_API_KEY/EMAIL_FROM delivers OTP email instead of defaulting to dev
+// mode (OTP logged to console) in the packaged, installed app.
+function loadDotenvEmail() {
+  try {
+    require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
+  } catch { /* dotenv unavailable or file missing */ }
+  return {
+    resendApiKey: (process.env.RESEND_API_KEY || '').trim(),
+    from: (process.env.EMAIL_FROM || '').trim(),
+  };
+}
+const DEFAULT_EMAIL = loadDotenvEmail();
+
 const DEFAULTS = {
   groqApiKey: '',
   groqModel: 'openai/gpt-oss-120b',
@@ -35,8 +51,8 @@ const DEFAULTS = {
   },
   limits: {},
   email: {
-    resendApiKey: '',
-    from: 'TraceIQ <onboarding@resend.dev>',
+    resendApiKey: DEFAULT_EMAIL.resendApiKey,
+    from: DEFAULT_EMAIL.from || 'TraceIQ <onboarding@resend.dev>',
   },
 };
 
@@ -98,6 +114,12 @@ function loadConfig() {
   };
   // The MongoDB URI is baked in and never user-editable; ignore anything stored.
   merged.mongodbUri = DEFAULTS.mongodbUri;
+  // Email sender config is baked in from .env at build time and is never exposed
+  // in the Settings UI, so the build-time source is authoritative. This prevents
+  // an older config.json (saved when .env had no RESEND_API_KEY) from forcing
+  // the packaged app back into dev mode (OTP logged to console) instead of
+  // actually emailing.
+  merged.email = DEFAULTS.email;
   // Prefer the .env APP_SECRET so both launchers share one encryption key.
   const envSecret = loadDotenvAppSecret();
   const current = merged.appSecret && /^[0-9a-fA-F]{64}$/.test(merged.appSecret)
