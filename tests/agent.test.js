@@ -861,4 +861,66 @@ describe('Agent Runtime', () => {
 
     expect(mockCreateInvestigation).toHaveBeenCalledWith('Threaded standalone run', 'thread-3');
   });
+
+  it('should stop immediately and mark cancelled when shouldCancel is true before any call', async () => {
+    const result = await runInvestigation('Cancel me', {
+      shouldCancel: () => true,
+    });
+
+    expect(result.status).toBe('cancelled');
+    expect(result.errors).toContain('Cancelled by user');
+    expect(mockChatCompletion).not.toHaveBeenCalled();
+    expect(mockFinalizeInvestigation).toHaveBeenCalledWith('test-inv-id', expect.objectContaining({ status: 'cancelled' }));
+  });
+
+  it('should stop immediately and mark cancelled when the abort signal is already aborted', async () => {
+    const controller = { signal: { aborted: true } };
+    const result = await runInvestigation('Cancel me', { abortSignal: controller.signal });
+
+    expect(result.status).toBe('cancelled');
+    expect(mockChatCompletion).not.toHaveBeenCalled();
+    expect(mockFinalizeInvestigation).toHaveBeenCalledWith('test-inv-id', expect.objectContaining({ status: 'cancelled' }));
+  });
+
+  it('should cancel mid-loop once shouldCancel flips true and skip synthesis', async () => {
+    let calls = 0;
+    mockChatCompletion.mockImplementation((params) => {
+      calls++;
+      // First call returns a tool call so the loop continues; the cancel flag flips next iteration.
+      if (calls === 1) {
+        return Promise.resolve({
+          message: assistantMsg(null, [toolCall('call_1', 'execute_sql', { sql: 'SELECT 1' })]),
+          finishReason: 'tool_calls',
+          usage: {},
+          duration: 100,
+        });
+      }
+      return Promise.resolve({
+        message: { content: 'Should never reach synthesis.', tool_calls: null },
+        finishReason: 'stop',
+        usage: {},
+        duration: 100,
+      });
+    });
+
+    const result = await runInvestigation('Cancel mid-run', {
+      investigationId: 'pre-existing-id',
+      shouldCancel: () => calls >= 1,
+    });
+
+    expect(result.status).toBe('cancelled');
+    expect(mockFinalizeInvestigation).toHaveBeenCalledWith('pre-existing-id', expect.objectContaining({ status: 'cancelled' }));
+  });
+
+  it('should treat an AbortError from the LLM call as cancelled, not failed', async () => {
+    const abortErr = new Error('The operation was aborted');
+    abortErr.name = 'AbortError';
+    mockChatCompletion.mockRejectedValueOnce(abortErr);
+
+    const result = await runInvestigation('Abort during call', { investigationId: 'inv-abort' });
+
+    expect(result.status).toBe('cancelled');
+    expect(result.errors.some(e => e === 'Investigation cancelled')).toBe(true);
+    expect(mockFinalizeInvestigation).toHaveBeenCalledWith('inv-abort', expect.objectContaining({ status: 'cancelled' }));
+  });
 });

@@ -10,12 +10,14 @@ const logger = pino({ name: 'job-runner' });
 const activeJobs = new Map();
 
 export function startJob({ investigationId, question, threadId = null, threadContext = [], userId = null }) {
-  const promise = executeJob({ investigationId, question, threadId, threadContext, userId })
+  const record = { cancelled: false };
+  const promise = executeJob({ investigationId, question, threadId, threadContext, userId, record })
     .catch(err => {
       logger.error({ err: err.message, investigationId }, 'Background job crashed');
     })
     .finally(() => activeJobs.delete(investigationId));
-  activeJobs.set(investigationId, promise);
+  record.promise = promise;
+  activeJobs.set(investigationId, record);
   return promise;
 }
 
@@ -27,7 +29,22 @@ export function activeJobCount() {
   return activeJobs.size;
 }
 
-async function executeJob({ investigationId, question, threadId, threadContext, userId }) {
+// Requests cancellation of an in-flight job. Idempotent and a no-op for
+// unknown/inactive ids. The running agent loop observes the flag between steps.
+export function cancelJob(investigationId) {
+  const record = activeJobs.get(investigationId);
+  if (!record) {
+    return false;
+  }
+  if (record.cancelled) {
+    return true;
+  }
+  record.cancelled = true;
+  logger.info({ investigationId }, 'Cancellation requested for job');
+  return true;
+}
+
+async function executeJob({ investigationId, question, threadId, threadContext, userId, record }) {
   try {
     await investigationRateLimiter.acquire();
   } catch (err) {
@@ -37,6 +54,11 @@ async function executeJob({ investigationId, question, threadId, threadContext, 
   }
 
   try {
+    if (record.cancelled) {
+      await finalizeAs(investigationId, 'cancelled', 'Investigation cancelled before it started');
+      return { investigationId, status: 'cancelled' };
+    }
+
     let connectionId = null;
     let database = null;
     if (threadId) {
@@ -53,7 +75,14 @@ async function executeJob({ investigationId, question, threadId, threadContext, 
         groqConfig = { apiKey: cfg.apiKey, model: cfg.model || null };
       }
     }
-    const runOpts = { investigationId, threadId, threadContext, connectionId, database };
+    const runOpts = {
+      investigationId,
+      threadId,
+      threadContext,
+      connectionId,
+      database,
+      shouldCancel: () => record.cancelled,
+    };
     if (groqConfig) runOpts.groqConfig = groqConfig;
     const result = await runInvestigation(question, runOpts);
     if (threadId && result.status === 'completed' && result.answer) {
@@ -81,5 +110,20 @@ async function safeFinalize(investigationId, errorMessage) {
     });
   } catch (err) {
     logger.error({ err: err.message, investigationId }, 'Failed to persist queue-timeout failure');
+  }
+}
+
+async function finalizeAs(investigationId, status, error) {
+  try {
+    await finalizeInvestigation(investigationId, {
+      status,
+      answer: null,
+      error,
+      steps: 0,
+      sqlQueries: 0,
+      durationMs: 0,
+    });
+  } catch (err) {
+    logger.error({ err: err.message, investigationId }, 'Failed to persist cancellation');
   }
 }

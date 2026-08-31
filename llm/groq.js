@@ -62,7 +62,7 @@ function getRetryDelay(attempt, err) {
   return BASE_DELAY_MS * Math.pow(2, attempt) + jitter;
 }
 
-export async function chatCompletion({ messages, tools, temperature = 0.1, apiKey, model }) {
+export async function chatCompletion({ messages, tools, temperature = 0.1, apiKey, model, signal }) {
   const requestStart = Date.now();
   const effectiveModel = model || env.GROQ_MODEL;
 
@@ -109,8 +109,13 @@ export async function chatCompletion({ messages, tools, temperature = 0.1, apiKe
     }
 
     try {
+      if (signal?.aborted) {
+        const err = new Error('Request aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
       const client = apiKey ? new Groq({ apiKey }) : getClient();
-      const response = await client.chat.completions.create(params);
+      const response = await client.chat.completions.create(params, signal ? { signal } : undefined);
 
       const requestEnd = Date.now();
       const duration = requestEnd - requestStart;

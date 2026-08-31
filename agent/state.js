@@ -105,3 +105,16 @@ export function markFailed(state, error) {
   state.endTime = Date.now();
   state.totalDuration = state.endTime - state.startTime;
 }
+
+export function markCancelled(state, reason = 'Cancelled by user') {
+  state.status = 'cancelled';
+  state.finalAnswer = null;
+  state.errors.push(reason);
+  state.endTime = Date.now();
+  state.totalDuration = state.endTime - state.startTime;
+}
+
+export function isAborted({ aborted, shouldCancel }) {
+  if (aborted) return true;
+  return typeof shouldCancel === 'function' ? shouldCancel() : false;
+}

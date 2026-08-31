@@ -26,7 +26,7 @@ vi.mock('../database/thread-store.js', () => ({
   getThread: mockGetThread,
 }));
 
-import { startJob, isJobActive, activeJobCount } from '../services/job-runner.js';
+import { startJob, isJobActive, activeJobCount, cancelJob } from '../services/job-runner.js';
 
 function completedResult(answer = 'Found the root cause.') {
   return {
@@ -49,7 +49,7 @@ describe('Job Runner', () => {
   it('should run the job and persist assistant message for thread runs', async () => {
     await startJob({ investigationId: 'inv-1', question: 'Why?', threadId: 'thread-1' });
 
-    expect(mockRunInvestigation).toHaveBeenCalledWith('Why?', { investigationId: 'inv-1', threadId: 'thread-1', threadContext: [], connectionId: null, database: null });
+    expect(mockRunInvestigation).toHaveBeenCalledWith('Why?', { investigationId: 'inv-1', threadId: 'thread-1', threadContext: [], connectionId: null, database: null, shouldCancel: expect.any(Function) });
     expect(mockAddMessage).toHaveBeenCalledWith('thread-1', 'assistant', 'Found the root cause.');
     expect(mockRelease).toHaveBeenCalledTimes(1);
     expect(isJobActive('inv-1')).toBe(false);
@@ -97,6 +97,7 @@ describe('Job Runner', () => {
       threadContext: context,
       connectionId: null,
       database: null,
+      shouldCancel: expect.any(Function),
     });
   });
 
@@ -140,5 +141,50 @@ describe('Job Runner', () => {
 
     expect(isJobActive('inv-8')).toBe(false);
     expect(activeJobCount()).toBe(0);
+  });
+
+  it('should expose a cancel flag that flips when cancelJob is called', async () => {
+    let resolveRun;
+    let capturedShouldCancel;
+    mockRunInvestigation.mockImplementation((question, opts) => {
+      capturedShouldCancel = opts.shouldCancel;
+      return new Promise(resolve => { resolveRun = resolve; });
+    });
+
+    const promise = startJob({ investigationId: 'inv-cancel', question: 'Cancel me?' });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(typeof capturedShouldCancel).toBe('function');
+    expect(capturedShouldCancel()).toBe(false);
+
+    expect(cancelJob('inv-cancel')).toBe(true);
+    expect(cancelJob('inv-cancel')).toBe(true); // idempotent
+    expect(capturedShouldCancel()).toBe(true);
+
+    resolveRun({ investigationId: 'inv-cancel', status: 'cancelled' });
+    await promise;
+    await new Promise(resolve => setImmediate(resolve));
+    expect(isJobActive('inv-cancel')).toBe(false);
+  });
+
+  it('should be a no-op for unknown or inactive ids', async () => {
+    expect(cancelJob('inv-unknown')).toBe(false);
+  });
+
+  it('should finalize as cancelled when cancelled before the run starts', async () => {
+    // Defer rate-limiter acquisition so the job is parked before running.
+    let releaseAcquire;
+    mockAcquire.mockReturnValue(new Promise(resolve => { releaseAcquire = resolve; }));
+
+    const promise = startJob({ investigationId: 'inv-pre', question: 'Q?', threadId: 'thread-pre' });
+    expect(cancelJob('inv-pre')).toBe(true);
+
+    releaseAcquire();
+    const result = await promise;
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(result.status).toBe('cancelled');
+    expect(mockRunInvestigation).not.toHaveBeenCalled();
+    expect(mockFinalize).toHaveBeenCalledWith('inv-pre', expect.objectContaining({ status: 'cancelled' }));
+    expect(isJobActive('inv-pre')).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import { testDbConnection } from '../database/mongodb.js';
 import { getInvestigation, listInvestigations, createInvestigation } from '../database/investigation-store.js';
 import { getConnectionRow, touchConnection } from '../database/connection-store.js';
 import { validateDatabaseName } from './connections.controller.js';
-import { startJob } from '../services/job-runner.js';
+import { startJob, cancelJob } from '../services/job-runner.js';
 import env from '../config/env.js';
 
 const logger = pino({ name: 'controller' });
@@ -98,5 +98,38 @@ export async function listAllInvestigations(req, res) {
   } catch (err) {
     logger.error({ err: err.message }, 'Failed to list investigations');
     res.status(500).json({ error: 'Failed to list investigations', detail: err.message });
+  }
+}
+
+export async function cancelInvestigationHandler(req, res) {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({ error: 'Investigation ID is required' });
+  }
+
+  try {
+    // Ownership check — must belong to the signed-in user.
+    const investigation = await getInvestigation(id, req.userId);
+    if (!investigation) {
+      return res.status(404).json({ error: 'Investigation not found' });
+    }
+
+    const cancelled = cancelJob(id);
+    if (cancelled) {
+      logger.info({ investigationId: id }, 'Investigation cancel requested');
+      // The background job will finalize as 'cancelled' shortly.
+      return res.status(202).json({ id, status: 'cancelling', ok: true });
+    }
+
+    // Job not active: already finished (or was never queued). Idempotent success.
+    return res.status(200).json({
+      id,
+      status: investigation.status,
+      ok: true,
+      note: investigation.status === 'cancelled' ? 'Already cancelled' : 'Investigation is not currently running',
+    });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Failed to cancel investigation');
+    res.status(500).json({ error: 'Failed to cancel investigation', detail: err.message });
   }
 }
