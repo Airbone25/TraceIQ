@@ -3,11 +3,26 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 
+// The MongoDB connection string is baked into every build and is not editable
+// from the Settings UI. Instead of hardcoding a secret in source, the built-in
+// default is taken from MONGODB_URI in the repo's .env file (read at require
+// time). Set MONGODB_URI in .env to your Atlas/remote URI before building; the
+// app connects directly to that cluster for all product data (accounts, threads,
+// investigations, saved connections, Groq keys).
+function loadDotenvMongodbUri() {
+  try {
+    require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
+  } catch { /* dotenv unavailable or file missing */ }
+  const uri = (process.env.MONGODB_URI || '').trim();
+  return uri || 'mongodb://127.0.0.1:27017/traceiq';
+}
+const DEFAULT_MONGODB_URI = loadDotenvMongodbUri();
+
 const DEFAULTS = {
   groqApiKey: '',
   groqModel: 'openai/gpt-oss-120b',
   appSecret: '',
-  mongodbUri: 'mongodb://127.0.0.1:27017/traceiq',
+  mongodbUri: DEFAULT_MONGODB_URI,
   serverPort: 39101,
   metadata: {
     mysqlHost: '127.0.0.1',
@@ -77,6 +92,8 @@ function loadConfig() {
     metadata: { ...DEFAULTS.metadata, ...(file.metadata || {}) },
     limits: { ...DEFAULTS.limits, ...(file.limits || {}) },
   };
+  // The MongoDB URI is baked in and never user-editable; ignore anything stored.
+  merged.mongodbUri = DEFAULTS.mongodbUri;
   // Prefer the .env APP_SECRET so both launchers share one encryption key.
   const envSecret = loadDotenvAppSecret();
   const current = merged.appSecret && /^[0-9a-fA-F]{64}$/.test(merged.appSecret)

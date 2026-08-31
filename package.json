@@ -1,6 +1,6 @@
 {
   "name": "traceiq",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AI Database Investigation Agent",
   "author": "TraceIQ",
   "main": "electron/main.cjs",
@@ -49,6 +49,7 @@
     "asar": false,
     "files": [
       "electron/**/*",
+      ".env",
       "src/**/*",
       "public/**/*",
       "routes/**/*",

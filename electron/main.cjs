@@ -109,7 +109,7 @@ async function bootApp() {
         type: 'warning',
         title: 'Product-data store unavailable',
         message: 'Could not connect to the MongoDB database that stores app data.',
-        detail: `${err.message}\n\nOpen Settings to set MONGODB_URI (Atlas or self-hosted), then relaunch.`,
+        detail: `${err.message}\n\nThe MongoDB connection is baked into this build and cannot be changed from Settings.`,
         buttons: ['Open Settings', 'Quit'],
       }).then(({ response }) => {
         if (response === 0) openSettings();
@@ -221,9 +221,6 @@ ipcMain.handle('desktop:save-settings', async (_e, payload) => {
   }
   if (typeof payload.groqModel === 'string') {
     next.groqModel = payload.groqModel.trim() || 'openai/gpt-oss-120b';
-  }
-  if (typeof payload.mongodbUri === 'string' && payload.mongodbUri.trim() !== '') {
-    next.mongodbUri = payload.mongodbUri.trim();
   }
   if (payload.metadata && typeof payload.metadata === 'object') {
     next.metadata = {

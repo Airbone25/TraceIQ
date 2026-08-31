@@ -42,16 +42,6 @@
   </section>
 
   <section>
-    <h2>Data store (MongoDB)</h2>
-    <p>
-      Your account, Groq key, saved connections, threads and investigations live in MongoDB.
-      Use a MongoDB Atlas connection string or a self-hosted <code>mongodb://</code> URI so your data
-      follows you to any computer that points here.
-    </p>
-    <input id="mongo-uri" type="text" placeholder="mongodb://127.0.0.1:27017/traceiq">
-  </section>
-
-  <section>
     <h2>About</h2>
     <div class="meta" id="meta"></div>
     <div class="utility" style="margin-top:14px">
@@ -79,7 +69,7 @@
     async function load() {
       const cfg = await desktop.getConfigState();
       $('server-port').value = cfg.serverPort || 39101;
-      if (cfg.mongodbUri) $('mongo-uri').value = cfg.mongodbUri;
+      if (cfg.mongodbUri) $('mongo-uri').textContent = cfg.mongodbUri;
       $('meta').innerHTML =
         'Version: <code>' + (cfg.version || '?') + '</code><br>' +
         'Data directory: <code>' + (cfg.userDataPath || '') + '</code>';
@@ -91,7 +81,6 @@
       btn.disabled = true;
       const payload = {
         serverPort: $('server-port').value,
-        mongodbUri: $('mongo-uri').value.trim(),
       };
       const res = await desktop.saveSettings(payload);
       if (res && res.ok) {
