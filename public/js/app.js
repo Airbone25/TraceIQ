@@ -31,6 +31,14 @@ const els = {
   groqSetupVerify: document.getElementById('groq-setup-verify'),
   groqSetupError: document.getElementById('groq-setup-error'),
   groqSetupLink: document.getElementById('groq-setup-link'),
+  otpView: document.getElementById('otp-view'),
+  otpForm: document.getElementById('otp-form'),
+  otpCode: document.getElementById('otp-code'),
+  otpSubmit: document.getElementById('otp-submit'),
+  otpResend: document.getElementById('otp-resend'),
+  otpBack: document.getElementById('otp-back'),
+  otpError: document.getElementById('otp-error'),
+  otpEmail: document.getElementById('otp-email'),
   logoutBtn: document.getElementById('logout-btn'),
   logoutModal: document.getElementById('logout-modal'),
   logoutConfirm: document.getElementById('logout-confirm'),
@@ -84,6 +92,9 @@ let state = {
   connectionsCache: [],
   threadsLoading: false,
   threadsLoaded: false,
+  pendingOtpEmail: null,
+  eventController: null,
+  eventStreamOpen: false,
 };
 
 async function api(path, options = {}) {
@@ -99,7 +110,10 @@ async function api(path, options = {}) {
     if (res.status === 401 && !path.startsWith('/auth/') && els.authView.classList.contains('hidden')) {
       sessionExpired();
     }
-    throw new Error(body.error || `Request failed (${res.status})`);
+    const err = new Error(body.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
   }
   return { ok: res.ok, status: res.status, body };
 }
@@ -181,6 +195,8 @@ function sessionExpired() {
 function showAuthView() {
   els.appLayout.classList.add('hidden');
   els.groqSetupView.classList.add('hidden');
+  els.otpView.classList.add('hidden');
+  clearOtpCountdown();
   els.authView.classList.remove('hidden');
   els.authPassword.value = '';
   els.authError.textContent = '';
@@ -189,6 +205,8 @@ function showAuthView() {
 function showGroqSetupView() {
   els.authView.classList.add('hidden');
   els.appLayout.classList.add('hidden');
+  els.otpView.classList.add('hidden');
+  clearOtpCountdown();
   els.groqSetupKey.value = '';
   els.groqSetupError.textContent = '';
   els.groqSetupError.classList.remove('shake');
@@ -198,10 +216,62 @@ function showGroqSetupView() {
 function enterApp() {
   els.authView.classList.add('hidden');
   els.groqSetupView.classList.add('hidden');
+  els.otpView.classList.add('hidden');
+  clearOtpCountdown();
   els.appLayout.classList.remove('hidden');
   refreshThreads();
   cacheConnections();
   newThread();
+}
+
+function showOtpView(email) {
+  els.authView.classList.add('hidden');
+  els.groqSetupView.classList.add('hidden');
+  els.appLayout.classList.add('hidden');
+  state.pendingOtpEmail = email || null;
+  els.otpEmail.textContent = state.pendingOtpEmail || '';
+  els.otpCode.value = '';
+  els.otpError.textContent = '';
+  els.otpCode.disabled = false;
+  els.otpSubmit.disabled = false;
+  els.otpView.classList.remove('hidden');
+  setTimeout(() => els.otpCode?.focus(), 0);
+  startOtpCountdown();
+}
+
+function setOtpError(msg) {
+  els.otpError.textContent = msg;
+  els.otpError.classList.remove('shake');
+  // force reflow to restart the shake animation
+  void els.otpError.offsetWidth;
+  els.otpError.classList.add('shake');
+}
+
+let otpCountdownTimer = null;
+function startOtpCountdown(seconds = 10) {
+  const btn = els.otpResend;
+  clearOtpCountdown();
+  btn.disabled = true;
+  let remaining = Math.max(1, Math.floor(seconds));
+  const tick = () => {
+    btn.textContent = `Resend code (${remaining}s)`;
+    if (remaining <= 0) {
+      clearInterval(otpCountdownTimer);
+      otpCountdownTimer = null;
+      btn.textContent = 'Resend code';
+      btn.disabled = false;
+    } else {
+      remaining--;
+    }
+  };
+  tick();
+  otpCountdownTimer = setInterval(tick, 1000);
+}
+function clearOtpCountdown() {
+  if (otpCountdownTimer) {
+    clearInterval(otpCountdownTimer);
+    otpCountdownTimer = null;
+  }
 }
 
 async function initSession() {
@@ -241,13 +311,22 @@ async function submitAuth(event) {
   }
   els.authSubmit.disabled = true;
   try {
-    const { body: authBody } = await api(path, {
+    const { status, body: authBody } = await api(path, {
       method: 'POST',
       body: JSON.stringify({
         email: els.authEmail.value.trim(),
         password: els.authPassword.value,
       }),
     });
+    if (status === 409) {
+      els.authError.textContent = authBody?.error || 'An account with this email already exists';
+      return;
+    }
+    if (authBody && authBody.requiresVerification) {
+      // Registration: OTP must be verified before a token is issued.
+      showOtpView(authBody.email || els.authEmail.value.trim());
+      return;
+    }
     if (authBody && authBody.token) setAuthToken(authBody.token);
     const { body } = await api('/auth/me');
     updateSidebarUser(body);
@@ -257,9 +336,72 @@ async function submitAuth(event) {
       enterApp();
     }
   } catch (err) {
-    els.authError.textContent = err.message;
+    if (err.status === 403 && err.body?.requiresVerification) {
+      showOtpView(err.body.email || els.authEmail.value.trim());
+    } else {
+      els.authError.textContent = err.message;
+    }
   } finally {
     els.authSubmit.disabled = false;
+  }
+}
+
+async function submitOtp(event) {
+  event.preventDefault();
+  const email = state.pendingOtpEmail;
+  const code = els.otpCode.value.trim();
+  if (!email || !code) {
+    setOtpError('Enter the 6-digit code from your email.');
+    return;
+  }
+  els.otpSubmit.disabled = true;
+  els.otpCode.disabled = true;
+  els.otpError.textContent = '';
+  try {
+    const { body } = await api('/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    });
+    if (body.token) setAuthToken(body.token);
+    const me = await api('/auth/me');
+    updateSidebarUser(me.body);
+    if (me.body.groqConfigured === false) {
+      showGroqSetupView();
+    } else {
+      enterApp();
+    }
+  } catch (err) {
+    els.otpCode.disabled = false;
+    setOtpError(err.message);
+    if (err.status === 410) {
+      startOtpCountdown();
+    }
+  } finally {
+    els.otpSubmit.disabled = false;
+  }
+}
+
+async function resendOtp() {
+  const email = state.pendingOtpEmail;
+  if (!email) return;
+  els.otpResend.disabled = true;
+  els.otpError.textContent = '';
+  try {
+    await api('/auth/resend-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    els.otpCode.value = '';
+    setOtpError('A new code was sent.');
+    startOtpCountdown();
+  } catch (err) {
+    setOtpError(err.message);
+    if (err.status !== 429) {
+      els.otpResend.disabled = false;
+    } else {
+      // Server-enforced cooldown; reflect it in the button.
+      startOtpCountdown(err.body?.retryAfterSec || 10);
+    }
   }
 }
 
@@ -571,13 +713,37 @@ function ensureProgressCard() {
     card.id = 'progress-card';
     card.innerHTML = `
       <div class="progress-card">
-        <div class="progress-header"><span class="spinner"></span> <span class="progress-label">Investigating...</span></div>
+        <div class="progress-header"><span class="spinner"></span> <span class="progress-label">Investigating...</span>
+          <button type="button" id="stop-run-btn" class="stop-btn" title="Stop this investigation">Stop</button>
+        </div>
         <div class="progress-steps"></div>
       </div>`;
     messagesInner().appendChild(card);
     state.renderedStepCount = 0;
+    card.querySelector('#stop-run-btn').addEventListener('click', cancelActiveRun);
   }
   return card;
+}
+
+async function cancelActiveRun() {
+  const run = state.detail?.runs?.length ? state.detail.runs[state.detail.runs.length - 1] : null;
+  if (!run || run.status !== 'running' || !run.id) return;
+  const btn = document.getElementById('stop-run-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Stopping…';
+  }
+  try {
+    await api(`/investigations/${run.id}/cancel`, { method: 'POST' });
+  } catch (err) {
+    // Best-effort: the run may finish on its own; polling will catch up.
+    appendMessage('assistant', `Could not stop investigation: ${err.message}`, { failed: true });
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Stop';
+    }
+  }
 }
 
 const STEP_META = {
@@ -697,6 +863,8 @@ function renderTerminalAnswer(detail) {
 
   if (run && run.status === 'failed' && lastMsgRole === 'user') {
     appendMessage('assistant', `Investigation failed: ${run.error || 'unknown error'}`, { failed: true });
+  } else if (run && run.status === 'cancelled' && lastMsgRole === 'user') {
+    appendMessage('assistant', 'Investigation stopped by the user.', { failed: true });
   } else if (run && run.status === 'completed' && lastMsgRole === 'user') {
     appendMessage('assistant', run.final_answer || 'No answer generated.', {
       duration: run.duration_ms,
@@ -756,6 +924,8 @@ function renderThread(detail) {
 
 async function openThread(threadId) {
   stopPolling();
+  stopEventStream();
+  state.eventStreamOpen = false;
   state.viewGen++;
   state.activeThreadId = threadId;
   state.detail = null;
@@ -766,7 +936,6 @@ async function openThread(threadId) {
   els.input.placeholder = 'Ask a question about your database...';
   renderSidebar();
   await pollOnce();
-  startPolling();
 }
 
 async function pollOnce() {
@@ -778,8 +947,12 @@ async function pollOnce() {
     state.detail = body;
     renderThread(body);
 
-    if (latestRun(body)?.status !== 'running') {
+    const run = latestRun(body);
+    if (run && run.status === 'running') {
+      ensureLiveStream();
+    } else {
       stopPolling();
+      stopEventStream();
       refreshThreads();
     }
   } catch (err) {
@@ -798,6 +971,98 @@ function startPolling() {
 function stopPolling() {
   clearInterval(state.pollTimer);
   state.pollTimer = null;
+}
+
+/* ---------- Live SSE (fetch-based; polling fallback) ---------- */
+
+function stopEventStream() {
+  if (state.eventController) {
+    state.eventController.abort();
+    state.eventController = null;
+  }
+  state.eventStreamOpen = false;
+}
+
+function handleStreamDetail(data) {
+  if (!state.eventStreamOpen) return;
+  const gen = state.viewGen;
+  if (gen !== state.viewGen || !state.activeThreadId) return;
+  state.detail = data;
+  renderThread(data);
+  const run = latestRun(data);
+  if (!run || run.status !== 'running') {
+    stopEventStream();
+    refreshThreads();
+  }
+}
+
+function startEventStream() {
+  stopEventStream();
+  if (!state.activeThreadId) return;
+  const token = getAuthToken();
+  if (!token) {
+    startPolling();
+    return;
+  }
+
+  const controller = new AbortController();
+  state.eventController = controller;
+  state.eventStreamOpen = true;
+
+  (async () => {
+    try {
+      const res = await fetch(`/api/threads/${state.activeThreadId}/stream`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        throw new Error(`stream ${res.status}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (state.eventStreamOpen) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep;
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          const block = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          let event = 'message';
+          const dataLines = [];
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event:')) event = line.slice(6).trim();
+            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+            // ':' comments are heartbeats; ignore them.
+          }
+          if ((event === 'snapshot' || event === 'update') && dataLines.length) {
+            try {
+              handleStreamDetail(JSON.parse(dataLines.join('\n')));
+            } catch { /* ignore malformed payload */ }
+          }
+        }
+      }
+    } catch (err) {
+      // Abort (intentional close) vs. network error — both just stop the stream.
+    } finally {
+      if (state.eventController === controller) {
+        state.eventController = null;
+        state.eventStreamOpen = false;
+      }
+      // Polling fallback: only if we're still on the same active run.
+      const run = state.detail && latestRun(state.detail);
+      if (state.activeThreadId && run && run.status === 'running') {
+        startPolling();
+      }
+    }
+  })();
+}
+
+function ensureLiveStream() {
+  if (state.eventStreamOpen) return;
+  stopPolling();
+  startEventStream();
 }
 
 /* ---------- Composer ---------- */
@@ -864,6 +1129,7 @@ function renderEmptyState() {
 
 function newThread() {
   stopPolling();
+  stopEventStream();
   state.viewGen++;
   state.activeThreadId = null;
   state.detail = null;
@@ -926,7 +1192,6 @@ async function submitQuestion(event) {
     state.pendingTarget = null;
     await refreshThreads();
     await pollOnce();
-    startPolling();
   } catch (err) {
     appendMessage('assistant', err.message, { failed: true });
     scrollToBottomNow();
@@ -935,8 +1200,42 @@ async function submitQuestion(event) {
 }
 
 function autoGrow() {
+  if (!els.input) return;
   els.input.style.height = 'auto';
   els.input.style.height = Math.min(els.input.scrollHeight, 160) + 'px';
+}
+
+function onComposerKeydown(event) {
+  if (event.key !== 'Enter') return;
+  // Allow IME composition (e.g. CJK) to complete naturally.
+  if (event.isComposing || event.keyCode === 229) return;
+  if (event.shiftKey) {
+    // Shift+Enter -> newline, then let the default insert happen and re-grow.
+    requestAnimationFrame(autoGrow);
+    return;
+  }
+  event.preventDefault();
+  if (!els.input.disabled && !els.sendBtn.disabled) {
+    els.form.requestSubmit();
+  }
+}
+
+function onGlobalKeydown(event) {
+  if (event.key === 'Escape' && els.logoutModal && !els.logoutModal.classList.contains('hidden')) {
+    closeLogoutModal();
+    return;
+  }
+  const mod = event.ctrlKey || event.metaKey;
+  if (mod && (event.key === 'n' || event.key === 'N')) {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    const editing = tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable);
+    // Allow the browser's native "new window" only when typing in a field; otherwise new thread.
+    if (!editing) {
+      event.preventDefault();
+      newThread();
+      openNewChatWizard();
+    }
+  }
 }
 
 /* ---------- Health ---------- */
@@ -1285,6 +1584,7 @@ els.newThreadBtn.addEventListener('click', () => {
 });
 els.form.addEventListener('submit', submitQuestion);
 els.input.addEventListener('input', autoGrow);
+els.input.addEventListener('keydown', onComposerKeydown);
 els.closeNewChatModal.addEventListener('click', closeNewChatWizard);
 els.newChatModal.addEventListener('click', (e) => {
   if (e.target === els.newChatModal) closeNewChatWizard();
@@ -1317,13 +1617,23 @@ els.logoutBtn.addEventListener('click', () => openLogoutModal());
 els.logoutCancel?.addEventListener('click', () => closeLogoutModal());
 els.logoutConfirm?.addEventListener('click', () => performLogout());
 els.logoutModal?.addEventListener('click', (e) => { if (e.target === els.logoutModal) closeLogoutModal(); });
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && els.logoutModal && !els.logoutModal.classList.contains('hidden')) closeLogoutModal();
-});
+document.addEventListener('keydown', onGlobalKeydown);
 els.authForm.addEventListener('submit', submitAuth);
 els.authSwitch.addEventListener('click', (e) => {
   e.preventDefault();
   setAuthMode(authMode === 'login' ? 'register' : 'login');
+});
+
+// ---------- OTP email verification ----------
+els.otpForm.addEventListener('submit', submitOtp);
+els.otpResend.addEventListener('click', resendOtp);
+els.otpBack.addEventListener('click', (e) => {
+  e.preventDefault();
+  showAuthView();
+});
+els.otpCode.addEventListener('input', () => {
+  els.otpCode.value = els.otpCode.value.replace(/\D/g, '').slice(0, 6);
+  if (els.otpError.textContent) els.otpError.textContent = '';
 });
 
 // ---------- First-login Groq setup ----------

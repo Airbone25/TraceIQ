@@ -39,6 +39,24 @@
     </div>
   </div>
 
+  <div id="otp-view" class="auth-view hidden">
+    <div class="auth-card">
+      <h1>Verify your email</h1>
+      <p class="auth-sub">We sent a 6-digit code to <strong id="otp-email"></strong></p>
+      <form id="otp-form" class="auth-form" novalidate>
+        <input id="otp-code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+               placeholder="6-digit code" autocomplete="one-time-code" required
+               autofocus spellcheck="false">
+        <div class="auth-actions">
+          <button type="submit" id="otp-submit" class="primary-btn">Verify</button>
+          <button type="button" id="otp-resend" class="ghost-btn">Resend code</button>
+        </div>
+        <p id="otp-error" class="auth-error"></p>
+      </form>
+      <p class="auth-toggle"><span>Wrong email?</span> <a href="#" id="otp-back">Go back</a></p>
+    </div>
+  </div>
+
   <div class="layout hidden" id="app-layout">
     <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
     <aside class="sidebar" id="sidebar">
@@ -90,6 +108,7 @@
           <textarea id="question-input" placeholder="Select an investigation to begin…" rows="1" disabled></textarea>
           <button type="submit" id="send-btn" disabled aria-label="Send">&#10148;</button>
         </form>
+        <div class="composer-hint">Enter &#8629; to send &#183; Shift+Enter for a new line &#183; Ctrl+N new investigation</div>
       </div>
     </main>
   </div>
