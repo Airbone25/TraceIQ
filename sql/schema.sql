@@ -1,4 +1,4 @@
--- TraceIQ Database Schema
+-- Whybase Database Schema
 
 CREATE TABLE IF NOT EXISTS customers (
   id INT AUTO_INCREMENT PRIMARY KEY,

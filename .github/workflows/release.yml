@@ -49,7 +49,7 @@ jobs:
           $assets += 'release/latest.yml'
           gh release create "$env:GITHUB_REF_NAME" @assets `
             --title "$env:GITHUB_REF_NAME" `
-            --notes "TraceIQ desktop release $env:GITHUB_REF_NAME" 2>&1 `
+            --notes "Whybase desktop release $env:GITHUB_REF_NAME" 2>&1 `
             || gh release upload "$env:GITHUB_REF_NAME" @assets --clobber
         shell: pwsh
 

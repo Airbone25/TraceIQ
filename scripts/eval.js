@@ -37,7 +37,7 @@ async function main() {
     }
   }
 
-  console.log('=== TraceIQ Evaluation Framework ===\n');
+  console.log('=== Whybase Evaluation Framework ===\n');
   if (onlyIds) {
     console.log(`Filtered to scenarios: ${scenarios.map(s => s.id).join(', ')}\n`);
   }

@@ -52,7 +52,7 @@ const DEFAULTS = {
   limits: {},
   email: {
     resendApiKey: DEFAULT_EMAIL.resendApiKey,
-    from: DEFAULT_EMAIL.from || 'TraceIQ <onboarding@resend.dev>',
+    from: DEFAULT_EMAIL.from || 'Whybase <onboarding@resend.dev>',
   },
 };
 
@@ -181,7 +181,7 @@ function toEnv() {
     MYSQL_SSL: cfg.metadata.mysqlUseSsl ? 'true' : 'false',
     MYSQL_SSL_REJECT_UNAUTHORIZED: cfg.metadata.mysqlSslRejectUnauthorized === false ? 'false' : 'true',
     RESEND_API_KEY: cfg.email?.resendApiKey || '',
-    EMAIL_FROM: cfg.email?.from || 'TraceIQ <onboarding@resend.dev>',
+    EMAIL_FROM: cfg.email?.from || 'Whybase <onboarding@resend.dev>',
   };
   for (const [key, envKey] of Object.entries(METADATA_LIMIT_KEYS)) {
     const val = cfg.limits && cfg.limits[key];

@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TraceIQ — AI Database Investigator</title>
+  <title>Whybase — AI Database Investigator</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
   <div id="auth-view" class="auth-view hidden">
     <div class="auth-card">
-      <h1>TraceIQ</h1>
+      <h1>Whybase</h1>
       <p class="auth-sub">AI investigations for your MySQL databases</p>
       <form id="auth-form" class="auth-form">
         <input id="auth-email" type="email" placeholder="Email" required autocomplete="email">
@@ -25,7 +25,7 @@
   <div id="groq-setup-view" class="auth-view hidden">
     <div class="auth-card">
       <h1>Connect your AI investigator</h1>
-      <p class="auth-sub">TraceIQ uses the Groq API to explore your databases and answer your questions.</p>
+      <p class="auth-sub">Whybase uses the Groq API to explore your databases and answer your questions.</p>
       <p class="auth-sub" style="margin-top:6px">Enter your Groq API key once. It's stored securely with your account and verified before you begin.</p>
       <form id="groq-setup-form" class="auth-form" novalidate>
         <input id="groq-setup-key" type="password" placeholder="Groq API key (gsk_...)" required autocomplete="off" spellcheck="false">
@@ -62,7 +62,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <button id="sidebar-toggle" class="icon-btn sidebar-toggle" aria-label="Toggle sidebar">&#9776;</button>
-        <div class="logo">TraceIQ</div>
+        <div class="logo">Whybase</div>
         <div class="sidebar-header-right">
           <span id="health-dot" class="health-dot" title="API status"></span>
           <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle theme">&#9681;</button>
@@ -123,7 +123,7 @@
       <section id="wizard-step-connection">
         <div id="first-run-banner" class="first-run-banner hidden">
           <p class="first-run-title">New here? Try a sample dataset</p>
-          <p class="first-run-sub">We'll create a small sales database on your server so you can explore TraceIQ right away.</p>
+          <p class="first-run-sub">We'll create a small sales database on your server so you can explore Whybase right away.</p>
         </div>
         <ul id="connections-list" class="connections-list"></ul>
         <button type="button" id="toggle-add-connection" class="link-btn">+ Add new connection</button>

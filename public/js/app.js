@@ -1100,7 +1100,7 @@ function buildSelectEmptyHtml() {
     return `
   <div class="empty-state select-state">
     <div class="select-icon-wrap"><span class="select-icon">◈</span></div>
-    <h2>Welcome to TraceIQ</h2>
+    <h2>Welcome to Whybase</h2>
     <p>No investigations yet.<br>Create your first one to start querying.</p>
     <button class="primary-btn select-cta" id="empty-new-investigation">+ New Investigation</button>
     <p class="select-hint">Each investigation is tied to a MySQL database — you'll pick the server &amp; database first.</p>

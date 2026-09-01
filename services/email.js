@@ -16,7 +16,7 @@ async function getResend() {
 }
 
 function fromAddress() {
-  return env.EMAIL_FROM || process.env.EMAIL_FROM || 'TraceIQ <onboarding@resend.dev>';
+  return env.EMAIL_FROM || process.env.EMAIL_FROM || 'Whybase <onboarding@resend.dev>';
 }
 
 // Sends the OTP email. Returns { sent: boolean, dev: boolean, code? }.
@@ -27,12 +27,12 @@ export async function sendOtpEmail({ to, otp }) {
   const expiryMinutes = env.EMAIL_OTP_TTL_MIN || 15;
 
   const Html = `
-    <h2>Your TraceIQ verification code</h2>
+    <h2>Your Whybase verification code</h2>
     <p>Use the code below to finish verifying your email. It expires in ${expiryMinutes} minutes.</p>
     <p style="font-size:28px; letter-spacing:6px; font-weight:700;">${otp}</p>
     <p style="color:#888;">If you didn't request this, you can safely ignore this email.</p>
   `;
-  const Text = `Your TraceIQ verification code is ${otp}. It expires in ${expiryMinutes} minutes. If you didn't request this, you can safely ignore this email.`;
+  const Text = `Your Whybase verification code is ${otp}. It expires in ${expiryMinutes} minutes. If you didn't request this, you can safely ignore this email.`;
 
   if (!resend) {
     logger.warn({ to }, `[dev-mode] No RESEND_API_KEY set; OTP emailed would be: ${otp}`);
@@ -43,7 +43,7 @@ export async function sendOtpEmail({ to, otp }) {
     const { error } = await resend.emails.send({
       from: fromAddress(),
       to,
-      subject: 'Verify your TraceIQ email',
+      subject: 'Verify your Whybase email',
       html: Html,
       text: Text,
     });

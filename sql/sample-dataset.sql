@@ -1,10 +1,10 @@
--- TraceIQ Sample Dataset
+-- Whybase Sample Dataset
 -- Fully self-contained: creates the database, its schema, and seeds data.
 
 CREATE DATABASE IF NOT EXISTS 	raceiq_sample;
 USE 	raceiq_sample;
 
--- TraceIQ Database Schema
+-- Whybase Database Schema
 
 CREATE TABLE IF NOT EXISTS customers (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS db_connections (
 
 USE 	raceiq_sample;
 
--- TraceIQ Seed Data
+-- Whybase Seed Data
 -- Contains intentional anomalies for agent evaluation
 
 -- Customers: 20 customers across countries, segments, and devices

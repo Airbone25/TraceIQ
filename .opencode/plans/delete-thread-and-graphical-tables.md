@@ -1,6 +1,6 @@
 # Plan: Thread Delete + Graphical Tables in Chat
 
-Approved by user. Two features for the TraceIQ chat dashboard.
+Approved by user. Two features for the Whybase chat dashboard.
 
 ## Feature 1 — Delete thread
 

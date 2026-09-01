@@ -1,4 +1,4 @@
--- TraceIQ Seed Data
+-- Whybase Seed Data
 -- Contains intentional anomalies for agent evaluation
 
 -- Customers: 20 customers across countries, segments, and devices

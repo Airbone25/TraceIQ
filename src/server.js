@@ -23,7 +23,7 @@ if (process.env.NODE_ENV !== 'test') {
   connectDb()
     .then(() => {
       app.listen(PORT, HOST, () => {
-        logger.info({ host: HOST, port: PORT }, `TraceIQ server running on ${HOST}:${PORT}`);
+        logger.info({ host: HOST, port: PORT }, `Whybase server running on ${HOST}:${PORT}`);
         failOrphanedInvestigations().catch(err => {
           logger.error({ err: err.message }, 'Startup reconciliation failed');
         });

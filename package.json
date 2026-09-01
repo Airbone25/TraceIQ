@@ -1,8 +1,8 @@
 {
-  "name": "traceiq",
-  "version": "1.2.2",
+  "name": "whybase",
+  "version": "1.0.0",
   "description": "AI Database Investigation Agent",
-  "author": "TraceIQ",
+  "author": "Whybase",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -44,8 +44,8 @@
     "utils/"
   ],
   "build": {
-    "appId": "com.traceiq.desktop",
-    "productName": "TraceIQ",
+    "appId": "com.whybase.desktop",
+    "productName": "Whybase",
     "asar": false,
     "files": [
       "electron/**/*",
@@ -93,7 +93,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "TraceIQ"
+      "shortcutName": "Whybase"
     },
     "directories": {
       "output": "release"

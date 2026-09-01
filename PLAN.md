@@ -1,4 +1,4 @@
-# TraceIQ — UI/UX Implementation Plan
+# Whybase — UI/UX Implementation Plan
 
 Resolved decisions:
 - Frontend behavior is **manually verified** — no jsdom test harness (keeps parity with the

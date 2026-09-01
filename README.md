@@ -1,6 +1,6 @@
 <div align="center">
 
-# TraceIQ
+# Whybase
 
 ### AI Database Investigation Agent
 
@@ -16,12 +16,12 @@ An autonomous agent that investigates business questions by exploring a MySQL da
 
 ## What Is This?
 
-TraceIQ is a production-grade AI agent that answers business questions by autonomously investigating a MySQL database. It is **not** a chatbot or a simple text-to-SQL wrapper. It is an agentic system that thinks, plans, executes, observes, and iterates.
+Whybase is a production-grade AI agent that answers business questions by autonomously investigating a MySQL database. It is **not** a chatbot or a simple text-to-SQL wrapper. It is an agentic system that thinks, plans, executes, observes, and iterates.
 
 **Example question:**
 > "Why did our orders drop yesterday compared to the previous 7 days?"
 
-**What TraceIQ does:**
+**What Whybase does:**
 
 1. Inspects the database schema to understand available data
 2. Forms a hypothesis about the root cause
@@ -159,7 +159,7 @@ For any shared or remote host, **enable MongoDB authentication** and include the
 
 ## Desktop App (Electron)
 
-TraceIQ ships as a desktop app so you can run investigations without git/npm/self‑hosting friction. The agent and Express server run entirely on your machine, bound to `127.0.0.1` only; your account and data are stored in a fixed MongoDB Atlas cluster that the app connects to directly. The MongoDB connection string is baked into the build and is not editable from Settings.
+Whybase ships as a desktop app so you can run investigations without git/npm/self‑hosting friction. The agent and Express server run entirely on your machine, bound to `127.0.0.1` only; your account and data are stored in a fixed MongoDB Atlas cluster that the app connects to directly. The MongoDB connection string is baked into the build and is not editable from Settings.
 
 - On first launch you see the **Login / Sign up** screen. Your account is stored in the app's data store (MongoDB), not edited in the UI.
 - The first time you log into an account, a short setup screen asks for your **Groq API key only** (model is fixed server‑side). The key is validated before you enter the app and stored per‑account in the data store; the default model is not user‑editable.
@@ -185,10 +185,10 @@ npm run desktop:dist:mac    # macOS dmg (x64+arm64) — requires macOS host
 npm run desktop:pack        # unpacked app for quick local test
 ```
 
-**Windows:** Tested. NSIS installer `release/TraceIQ Setup *.exe` (non-oneClick, choosable directory). No icon required — uses Electron default.
+**Windows:** Tested. NSIS installer `release/Whybase Setup *.exe` (non-oneClick, choosable directory). No icon required — uses Electron default.
 
 **Linux/mac — how to set up:**
-- *Linux:* `npm run desktop:dist:linux` on Ubuntu 22+ (`libarchive-tools` installed). Produces `TraceIQ-*.AppImage` (portable) — mark executable `chmod +x` and run. For `deb` add `"deb"` to `build.linux.target` (requires `fakeroot`). No code change.
+- *Linux:* `npm run desktop:dist:linux` on Ubuntu 22+ (`libarchive-tools` installed). Produces `Whybase-*.AppImage` (portable) — mark executable `chmod +x` and run. For `deb` add `"deb"` to `build.linux.target` (requires `fakeroot`). No code change.
 - *mac:* `npm run desktop:dist:mac` **must run on macOS** (GitHub `macos-latest` runner). Requires `CSC_LINK` (p12) + `APPLE_ID` notarization secrets for distribution outside App Store. The `mac` config in `package.json:build.mac` already targets `dmg` for `x64`+`arm64`. Build on Windows/Linux will fail for `mac` — use CI.
 
 **GitHub public release + auto-update:**
@@ -409,7 +409,7 @@ The seed dataset contains **5 intentional anomalies** designed to test whether t
 
 ## Evaluation Framework
 
-TraceIQ includes a deterministic evaluation framework for measuring agent performance against known anomalies.
+Whybase includes a deterministic evaluation framework for measuring agent performance against known anomalies.
 
 ```bash
 npm run eval    # Run all evaluation scenarios (requires live Groq API + MySQL)

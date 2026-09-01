@@ -51,7 +51,7 @@ const envSchema = z.object({
   THREAD_CONTEXT_ANSWER_CHARS: z.coerce.number().int().positive().default(2000),
   // Email verification via OTP (Resend). RESEND_API_KEY empty => dev mode (OTP logged).
   RESEND_API_KEY: z.string().default(''),
-  EMAIL_FROM: z.string().default('TraceIQ <onboarding@resend.dev>'),
+  EMAIL_FROM: z.string().default('Whybase <onboarding@resend.dev>'),
   EMAIL_OTP_TTL_MIN: z.coerce.number().int().positive().default(15),
   EMAIL_OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   EMAIL_OTP_RESEND_SEC: z.coerce.number().int().positive().default(60),

@@ -22,7 +22,7 @@ function createMainWindow() {
     height: 800,
     minWidth: 760,
     minHeight: 520,
-    title: 'TraceIQ',
+    title: 'Whybase',
     backgroundColor: '#17181c',
     autoHideMenuBar: true,
     webPreferences: {
@@ -77,7 +77,7 @@ function openSettings() {
     height: 720,
     parent: mainWindow,
     modal: false,
-    title: 'TraceIQ Settings',
+    title: 'Whybase Settings',
     backgroundColor: '#17181c',
     webPreferences: {
       preload: preloadPath(),
@@ -130,7 +130,7 @@ async function startServerAndLoad() {
   if (!portFree) {
     dialog.showErrorBox(
       'Port already in use',
-      `Port ${port} is already in use by another application.\n\nClose the other application, or open Settings and change the TraceIQ server port, then relaunch.`
+      `Port ${port} is already in use by another application.\n\nClose the other application, or open Settings and change the Whybase server port, then relaunch.`
     );
     return;
   }
@@ -146,7 +146,7 @@ async function startServerAndLoad() {
     console.error('Server exited before becoming ready', result);
     dialog.showErrorBox(
       'Server failed to start',
-      `The TraceIQ background server crashed during startup (exit code ${result.code}).\n\nCheck your MongoDB and Groq settings, then relaunch. See the logs for details.`
+      `The Whybase background server crashed during startup (exit code ${result.code}).\n\nCheck your MongoDB and Groq settings, then relaunch. See the logs for details.`
     );
     return;
   }
@@ -154,11 +154,11 @@ async function startServerAndLoad() {
     await desktopServer.stopServer();
     dialog.showErrorBox(
       'Server failed to start',
-      `The TraceIQ server did not become ready within 25s on port ${port}. Check your MongoDB and Groq settings, then relaunch.`
+      `The Whybase server did not become ready within 25s on port ${port}. Check your MongoDB and Groq settings, then relaunch.`
     );
     return;
   }
-  mainWindow.setTitle('TraceIQ');
+  mainWindow.setTitle('Whybase');
   mainWindow.loadURL(`http://127.0.0.1:${port}/`);
 }
 
@@ -313,7 +313,7 @@ function setupAutoUpdater() {
     dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Update ready',
-      message: 'A new version of TraceIQ has been downloaded.',
+      message: 'A new version of Whybase has been downloaded.',
       detail: 'Restart now to apply the update?',
       buttons: ['Restart', 'Later'],
       defaultId: 0,
@@ -332,7 +332,7 @@ function setupAutoUpdater() {
 // ---------- Lifecycle ----------
 
 app.whenReady().then(async () => {
-  app.setAppUserModelId('com.traceiq.desktop');
+  app.setAppUserModelId('com.whybase.desktop');
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
   desktopConfig.loadConfig(); // generates + persists APP_SECRET if missing
   buildMenu();
