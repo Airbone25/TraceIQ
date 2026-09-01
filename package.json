@@ -1,6 +1,6 @@
 {
   "name": "whybase",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "AI Database Investigation Agent",
   "author": "Whybase",
   "main": "electron/main.cjs",
@@ -46,6 +46,7 @@
   "build": {
     "appId": "com.whybase.desktop",
     "productName": "Whybase",
+    "artifactName": "Whybase.Setup.${version}.${ext}",
     "asar": false,
     "files": [
       "electron/**/*",

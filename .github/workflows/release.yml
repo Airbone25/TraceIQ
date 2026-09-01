@@ -93,6 +93,22 @@ jobs:
             exit 1
           }
           Get-ChildItem -Path release -File | Select-Object Name, Length
+      # electron-updater downloads whatever installer latest.yml points at. If the
+      # referenced file is not actually uploaded, clients see 'update available'
+      # then fail the download silently forever (404). Fail the build instead of
+      # shipping a broken update feed.
+      - name: Verify latest.yml feed URL matches a real artifact
+        shell: pwsh
+        run: |
+          $meta = Get-Content 'release/latest.yml' -Raw
+          $m = [regex]::Match($meta, 'url:\s*([^\r\n]+)')
+          if (-not $m.Success) { Write-Error 'latest.yml contains no files[0].url'; exit 1 }
+          $url = $m.Groups[1].Value.Trim()
+          if (-not (Test-Path (Join-Path 'release' $url))) {
+            Write-Error "latest.yml references '$url' but release/ has no such file. Check build.artifactName vs the uploaded artifact."
+            exit 1
+          }
+          Write-Host "latest.yml feed URL OK: $url"
       # Upload the artifacts to the GitHub Release. electron-updater on installed
       # clients polls the release's latest.yml, so exactly these files must land
       # there: the installer, its blockmap, and latest.yml. For tag pushes the
@@ -115,6 +131,26 @@ jobs:
             --title "$tag" `
             --notes "Whybase desktop release $tag" 2>&1 `
             || gh release upload "$tag" @assets --clobber
+      # Double-check the live release: the installer listed in latest.yml must
+      # actually be an asset of this release, forever (see the build-time guard).
+      - name: Verify published assets match latest.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "v$version" }
+          $meta = Get-Content 'release/latest.yml' -Raw
+          $m = [regex]::Match($meta, 'url:\s*([^\r\n]+)')
+          if (-not $m.Success) { Write-Error 'latest.yml contains no files[0].url'; exit 1 }
+          $url = $m.Groups[1].Value.Trim()
+          $names = gh release view "$tag" --json assets -q '.assets[].name'
+          if ($LASTEXITCODE -ne 0) { Write-Error 'gh release view failed'; exit 1 }
+          if ($names -notmatch [regex]::Escape($url)) {
+            Write-Error "latest.yml references '$url' but release '$tag' has no such asset. Published assets:`n$names"
+            exit 1
+          }
+          Write-Host "Published release '$tag' serves '$url'."
 
   # Uncomment to enable Linux/mac builds (require respective runners)
   # build-linux:

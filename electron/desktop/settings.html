@@ -25,6 +25,7 @@
     button.primary { background:var(--accent); color:#fff; border:none; border-radius:10px; padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; }
     button.ghost { background:transparent; color:var(--dim); border:1px solid var(--border); border-radius:10px; padding:10px 16px; font-size:13px; cursor:pointer; }
     button.primary:disabled { opacity:.5; cursor:default; }
+    .row { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
     .status { font-size:13px; color:var(--dim); min-height:18px; }
     .status.ok { color:var(--accent); }
     .status.err { color:var(--danger); white-space:pre-wrap; }
@@ -40,6 +41,15 @@
     <h2>Server port</h2>
     <p>The local background server that powers the app. On the rare case 39101 is taken, you can pick a different one here.</p>
     <input id="server-port" type="number" value="39101">
+  </section>
+
+  <section>
+    <h2>Updates</h2>
+    <p>Whybase checks GitHub Releases automatically at launch and every few hours. You can also trigger a check here.</p>
+    <div class="row">
+      <button class="primary" id="check-updates">Check for updates</button>
+      <div class="status" id="update-status">Version <code id="cur-version">…</code></div>
+    </div>
   </section>
 
   <section>
@@ -67,10 +77,46 @@
     $('open-folder').addEventListener('click', () => desktop.openUserDataFolder());
     $('cancel').addEventListener('click', () => window.close());
 
+    // ---------- Updates ----------
+    const updStatus = $('update-status');
+    const setUpdate = (cls, text) => { updStatus.textContent = text || ''; updStatus.className = 'status' + (cls ? ' ' + cls : ''); };
+
+    desktop.onUpdateStatus((p) => {
+      switch (p && p.status) {
+        case 'checking': setUpdate('', 'Checking for updates…'); return;
+        case 'available': setUpdate('ok', 'Version ' + (p.version || '?') + ' available — downloading…'); return;
+        case 'downloaded': setUpdate('ok', 'Version ' + (p.version || '?') + ' downloaded — click Restart in the dialog to install.'); return;
+        case 'up-to-date': setUpdate('ok', 'You are on the latest version (' + (p.version || '?') + ').'); return;
+        case 'error': setUpdate('err', 'Update check failed: ' + (p.error || 'unknown error')); return;
+        default: return;
+      }
+    });
+
+    $('check-updates').addEventListener('click', async () => {
+      const btn = $('check-updates');
+      btn.disabled = true;
+      setUpdate('', 'Checking for updates…');
+      try {
+        const res = await desktop.checkForUpdates();
+        if (res && res.ok && res.version) {
+          setUpdate('ok', 'Version ' + res.version + ' available — downloading…');
+        } else if (res && res.ok) {
+          setUpdate('ok', 'You are on the latest version (' + $('cur-version').textContent + ').');
+        } else {
+          setUpdate('err', 'Update check failed: ' + ((res && res.error) || 'unknown error'));
+        }
+      } catch (e) {
+        setUpdate('err', 'Update check failed: ' + (e && e.message ? e.message : e));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     async function load() {
       const cfg = await desktop.getConfigState();
       $('server-port').value = cfg.serverPort || 39101;
       if (cfg.mongodbUri) $('mongo-uri').textContent = cfg.mongodbUri;
+      $('cur-version').textContent = cfg.version || '?';
       $('meta').innerHTML =
         'Version: <code>' + (cfg.version || '?') + '</code><br>' +
         'Data directory: <code>' + (cfg.userDataPath || '') + '</code>';

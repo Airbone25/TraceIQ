@@ -17,4 +17,9 @@ contextBridge.exposeInMainWorld('traceiqDesktop', {
   // Server status for the settings page
   getServerStatus: () => ipcRenderer.invoke('desktop:server-status'),
   checkForUpdates: () => ipcRenderer.invoke('desktop:check-for-updates'),
+  onUpdateStatus: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('updater:status', handler);
+    return () => ipcRenderer.removeListener('updater:status', handler);
+  },
 });

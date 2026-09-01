@@ -301,15 +301,34 @@ function buildMenu() {
 
 // ---------- Auto-update (GitHub Releases) ----------
 
+function sendUpdaterStatus(payload) {
+  for (const win of [mainWindow, settingsWindow]) {
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send('updater:status', payload);
+    }
+  }
+}
+
 function setupAutoUpdater() {
   if (!autoUpdater || !app.isPackaged) return;
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('update-available', () => {
-    console.log('[updater] update available');
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[updater] checking for updates');
+    sendUpdaterStatus({ status: 'checking' });
   });
-  autoUpdater.on('update-downloaded', () => {
+  autoUpdater.on('update-available', (info) => {
+    console.log('[updater] update available:', info?.version);
+    sendUpdaterStatus({ status: 'available', version: info?.version || null });
+  });
+  autoUpdater.on('update-not-available', () => {
+    console.log('[updater] up to date');
+    sendUpdaterStatus({ status: 'up-to-date', version: app.getVersion() });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[updater] update downloaded:', info?.version);
+    sendUpdaterStatus({ status: 'downloaded', version: info?.version || null });
     dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Update ready',
@@ -323,6 +342,7 @@ function setupAutoUpdater() {
   });
   autoUpdater.on('error', (err) => {
     console.log('[updater] error:', err?.message || err);
+    sendUpdaterStatus({ status: 'error', error: err?.message || String(err) });
   });
   // Check 5s after boot, then every 6h
   setTimeout(() => autoUpdater.checkForUpdatesAndNotify().catch(() => {}), 5000);
