@@ -192,7 +192,7 @@ npm run desktop:pack        # unpacked app for quick local test
 - *mac:* `npm run desktop:dist:mac` **must run on macOS** (GitHub `macos-latest` runner). Requires `CSC_LINK` (p12) + `APPLE_ID` notarization secrets for distribution outside App Store. The `mac` config in `package.json:build.mac` already targets `dmg` for `x64`+`arm64`. Build on Windows/Linux will fail for `mac` — use CI.
 
 **GitHub public release + auto-update:**
-- `package.json:build.publish` points to `Airbone25/TraceIQ` via `electron-updater`. Push a tag `git tag v1.0.1 && git push origin v1.0.1` — `.github/workflows/release.yml` builds `win` (and optionally `linux`/`mac` when uncommented) and publishes `release/*.exe` + `latest.yml` to Releases.
+- `package.json:build.publish` points to `Airbone25/Whybase` via `electron-updater`. Push a tag `git tag v1.0.1 && git push origin v1.0.1` — `.github/workflows/release.yml` builds `win` (and optionally `linux`/`mac` when uncommented) and publishes `release/*.exe` + `latest.yml` to Releases.
 - **Required repository secrets** (Settings → Secrets and variables → Actions). The CI build bakes these into the installer, so without them a packaged app silently defaults to a local MongoDB and dev-mode email (OTP never sent):
   - `MONGODB_URI` — Atlas/remote URI for product data (accounts, threads, connections)
   - `RESEND_API_KEY` — Resend API key for OTP email (empty ⇒ dev mode)
