@@ -699,6 +699,14 @@ body {
   flex-direction: column;
   gap: 4px;
 }
+.app-version {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  padding: 0 8px 2px;
+  user-select: text;
+  cursor: default;
+}
 .footer-link {
   display: flex;
   align-items: center;

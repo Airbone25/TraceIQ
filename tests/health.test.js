@@ -55,6 +55,7 @@ describe('Health Endpoint', () => {
     expect(res.body.status).toBe('ok');
     expect(res.body.database).toBe('connected');
     expect(res.body.timestamp).toBeDefined();
+    expect(res.body.version).toBeDefined();
   });
 
   it('should reject missing question on investigate', async () => {

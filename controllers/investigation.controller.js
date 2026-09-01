@@ -1,4 +1,6 @@
 import pino from 'pino';
+import { readFileSync } from 'fs';
+import path from 'path';
 import { testDbConnection } from '../database/mongodb.js';
 import { getInvestigation, listInvestigations, createInvestigation } from '../database/investigation-store.js';
 import { getConnectionRow, touchConnection } from '../database/connection-store.js';
@@ -7,6 +9,16 @@ import { startJob, cancelJob } from '../services/job-runner.js';
 import env from '../config/env.js';
 
 const logger = pino({ name: 'controller' });
+
+function readAppVersion() {
+  try {
+    const pkg = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+    return pkg.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+const APP_VERSION = readAppVersion();
 
 export function validateQuestion(req) {
   const { question } = req.body;
@@ -31,6 +43,7 @@ export async function healthCheck(req, res) {
     status: dbOk ? 'ok' : 'degraded',
     timestamp: new Date().toISOString(),
     database: dbOk ? 'connected' : 'disconnected',
+    version: APP_VERSION,
   });
 }
 

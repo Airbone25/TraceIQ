@@ -55,6 +55,7 @@ const els = {
   sendBtn: document.getElementById('send-btn'),
   composerWrap: document.getElementById('composer-wrap'),
   healthDot: document.getElementById('health-dot'),
+  appVersion: document.getElementById('app-version'),
   targetBadge: document.getElementById('target-badge'),
   newChatModal: document.getElementById('new-chat-modal'),
   wizardTitle: document.getElementById('wizard-title'),
@@ -1244,6 +1245,12 @@ async function checkHealth() {
   try {
     const res = await fetch('/api/health');
     els.healthDot.className = `health-dot ${res.ok ? 'ok' : 'down'}`;
+    if (res.ok) {
+      const body = await res.json();
+      if (body?.version && els.appVersion) {
+        els.appVersion.textContent = `v${body.version}`;
+      }
+    }
   } catch {
     els.healthDot.className = 'health-dot down';
   }

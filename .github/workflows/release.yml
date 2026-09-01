@@ -66,6 +66,14 @@ jobs:
             Write-Error 'No repository secrets found. Add MONGODB_URI, SMTP_USER, SMTP_PASS, EMAIL_FROM, APP_SECRET (etc.) under Settings > Secrets and variables > Actions for the release build to bake in real defaults.'
             exit 1
           }
+          # Fail fast rather than ship an installer whose OTP email silently
+          # degrades to dev-mode (code logged, never emailed).
+          foreach ($required in @('MONGODB_URI', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM', 'APP_SECRET')) {
+            if (-not $vals[$required]) {
+              Write-Error "Missing required repository secret: $required. Without it this build bakes dev-mode defaults. Configure it under Settings > Secrets and variables > Actions, then re-run this workflow."
+              exit 1
+            }
+          }
           Set-Content -Path '.env' -Value $lines -Encoding Ascii
       # Build the unsigned NSIS installer (+ latest.yml + .blockmap) without
       # publishing. Skip code signing so electron-builder does not need the
