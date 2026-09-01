@@ -49,9 +49,13 @@ const envSchema = z.object({
   INVESTIGATION_QUEUE_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   THREAD_CONTEXT_TURNS: z.coerce.number().int().positive().default(3),
   THREAD_CONTEXT_ANSWER_CHARS: z.coerce.number().int().positive().default(2000),
-  // Email verification via OTP (Resend). RESEND_API_KEY empty => dev mode (OTP logged).
-  RESEND_API_KEY: z.string().default(''),
-  EMAIL_FROM: z.string().default('Whybase <onboarding@resend.dev>'),
+  // Email verification via OTP (SMTP, defaults to Gmail's app-password SMTP).
+  // SMTP_USER/SMTP_PASS empty => dev mode (OTP logged).
+  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_PORT: z.coerce.number().int().positive().default(465),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  EMAIL_FROM: z.string().default('Whybase <keshavmehra2005@gmail.com>'),
   EMAIL_OTP_TTL_MIN: z.coerce.number().int().positive().default(15),
   EMAIL_OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   EMAIL_OTP_RESEND_SEC: z.coerce.number().int().positive().default(60),
@@ -65,11 +69,15 @@ if (!parsed.success) {
 }
 
 const env = parsed.data;
+const EMAIL_FROM_WARNING = /@resend\.dev/i.test(env.EMAIL_FROM || '') ? env.EMAIL_FROM : '';
 if (!process.env.APP_SECRET && process.env.NODE_ENV !== 'test') {
   console.warn('WARNING: APP_SECRET not set - using insecure default. Set it in .env (openssl rand -hex 32) before storing any connection credentials.');
 }
 if (!process.env.MONGODB_URI && process.env.NODE_ENV !== 'test') {
   console.warn('WARNING: MONGODB_URI not set - defaulting to mongodb://127.0.0.1:27017/traceiq. Set MONGODB_URI in .env to point at your MongoDB (Atlas or self-hosted).');
+}
+if (EMAIL_FROM_WARNING) {
+  console.warn(`WARNING: EMAIL_FROM (${EMAIL_FROM_WARNING}) still uses Resend's sandbox sender onboarding@resend.dev. Resend only delivers that sender to the Resend account owner's inbox, so OTP emails to other recipients will never arrive. Configure an SMTP sender (SMTP_USER/SMTP_PASS/EMAIL_FROM) or verify a domain before shipping.`);
 }
 
 export default env;

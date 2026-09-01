@@ -19,17 +19,21 @@ jobs:
           cache: npm
       - run: npm ci
       # The repo's .env is gitignored and therefore absent in CI, but the build
-      # bakes selected values from it into the installer (MongoDB URI, Resend
-      # key/from, APP_SECRET). Without it the packaged app silently falls back to
-      # a local MongoDB and dev-mode email (OTP never sent). Generate a .env from
-      # repository secrets so installed builds get the real defaults. Values are
-      # written directly to the file and never echoed to the log.
+      # bakes selected values from it into the installer (MongoDB URI, SMTP
+      # sender for OTP email, APP_SECRET). Without it the packaged app silently
+      # falls back to a local MongoDB and dev-mode email (OTP never sent).
+      # Generate a .env from repository secrets so installed builds get the real
+      # defaults. Values are written directly to the file and never echoed to
+      # the log.
       - name: Generate .env for baked-in defaults
         shell: pwsh
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           APP_SECRET: ${{ secrets.APP_SECRET }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
           MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
@@ -41,7 +45,10 @@ jobs:
           $vals = [ordered]@{
             'MONGODB_URI'       = $env:MONGODB_URI
             'APP_SECRET'        = $env:APP_SECRET
-            'RESEND_API_KEY'    = $env:RESEND_API_KEY
+            'SMTP_HOST'         = $env:SMTP_HOST
+            'SMTP_PORT'         = $env:SMTP_PORT
+            'SMTP_USER'         = $env:SMTP_USER
+            'SMTP_PASS'         = $env:SMTP_PASS
             'EMAIL_FROM'        = $env:EMAIL_FROM
             'GROQ_MODEL'        = $env:GROQ_MODEL
             'MYSQL_HOST'        = $env:MYSQL_HOST
@@ -56,7 +63,7 @@ jobs:
             if ($v) { $lines += "$k=$v" }
           }
           if ($lines.Count -eq 0) {
-            Write-Error 'No repository secrets found. Add MONGODB_URI, RESEND_API_KEY, EMAIL_FROM, APP_SECRET (etc.) under Settings > Secrets and variables > Actions for the release build to bake in real defaults.'
+            Write-Error 'No repository secrets found. Add MONGODB_URI, SMTP_USER, SMTP_PASS, EMAIL_FROM, APP_SECRET (etc.) under Settings > Secrets and variables > Actions for the release build to bake in real defaults.'
             exit 1
           }
           Set-Content -Path '.env' -Value $lines -Encoding Ascii

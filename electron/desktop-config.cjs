@@ -18,17 +18,20 @@ function loadDotenvMongodbUri() {
 }
 const DEFAULT_MONGODB_URI = loadDotenvMongodbUri();
 
-// Like MONGODB_URI/APP_SECRET, the Resend sender config is read from the repo's
+// Like MONGODB_URI/APP_SECRET, the SMTP sender config is read from the repo's
 // .env (which is bundled into the package; see build.files ".env"). It falls
-// back to config.json values when present, so a build made with a real
-// RESEND_API_KEY/EMAIL_FROM delivers OTP email instead of defaulting to dev
-// mode (OTP logged to console) in the packaged, installed app.
+// back to config.json values when present, so a build made with real
+// SMTP_USER/SMTP_PASS/EMAIL_FROM delivers OTP email instead of defaulting to
+// dev mode (OTP logged to console) in the packaged, installed app.
 function loadDotenvEmail() {
   try {
     require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
   } catch { /* dotenv unavailable or file missing */ }
   return {
-    resendApiKey: (process.env.RESEND_API_KEY || '').trim(),
+    host: (process.env.SMTP_HOST || 'smtp.gmail.com').trim(),
+    port: (process.env.SMTP_PORT || '465').trim(),
+    user: (process.env.SMTP_USER || '').trim(),
+    pass: (process.env.SMTP_PASS || '').trim(),
     from: (process.env.EMAIL_FROM || '').trim(),
   };
 }
@@ -51,8 +54,11 @@ const DEFAULTS = {
   },
   limits: {},
   email: {
-    resendApiKey: DEFAULT_EMAIL.resendApiKey,
-    from: DEFAULT_EMAIL.from || 'Whybase <onboarding@resend.dev>',
+    host: DEFAULT_EMAIL.host,
+    port: DEFAULT_EMAIL.port,
+    user: DEFAULT_EMAIL.user,
+    pass: DEFAULT_EMAIL.pass,
+    from: DEFAULT_EMAIL.from || '',
   },
 };
 
@@ -116,7 +122,7 @@ function loadConfig() {
   merged.mongodbUri = DEFAULTS.mongodbUri;
   // Email sender config is baked in from .env at build time and is never exposed
   // in the Settings UI, so the build-time source is authoritative. This prevents
-  // an older config.json (saved when .env had no RESEND_API_KEY) from forcing
+  // an older config.json (saved when .env had no SMTP credentials) from forcing
   // the packaged app back into dev mode (OTP logged to console) instead of
   // actually emailing.
   merged.email = DEFAULTS.email;
@@ -180,8 +186,11 @@ function toEnv() {
     MYSQL_DATABASE: cfg.metadata.mysqlDatabase || 'traceiq',
     MYSQL_SSL: cfg.metadata.mysqlUseSsl ? 'true' : 'false',
     MYSQL_SSL_REJECT_UNAUTHORIZED: cfg.metadata.mysqlSslRejectUnauthorized === false ? 'false' : 'true',
-    RESEND_API_KEY: cfg.email?.resendApiKey || '',
-    EMAIL_FROM: cfg.email?.from || 'Whybase <onboarding@resend.dev>',
+    SMTP_HOST: cfg.email?.host || DEFAULTS.email.host || 'smtp.gmail.com',
+    SMTP_PORT: String(cfg.email?.port || DEFAULTS.email.port || 465),
+    SMTP_USER: cfg.email?.user || DEFAULTS.email.user || '',
+    SMTP_PASS: cfg.email?.pass || DEFAULTS.email.pass || '',
+    EMAIL_FROM: cfg.email?.from || DEFAULT_EMAIL.from || '',
   };
   for (const [key, envKey] of Object.entries(METADATA_LIMIT_KEYS)) {
     const val = cfg.limits && cfg.limits[key];

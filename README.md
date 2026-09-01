@@ -195,10 +195,12 @@ npm run desktop:pack        # unpacked app for quick local test
 - `package.json:build.publish` points to `Airbone25/Whybase` via `electron-updater`. Push a tag `git tag v1.0.1 && git push origin v1.0.1` — `.github/workflows/release.yml` builds `win` (and optionally `linux`/`mac` when uncommented) and publishes `release/*.exe` + `latest.yml` to Releases.
 - **Required repository secrets** (Settings → Secrets and variables → Actions). The CI build bakes these into the installer, so without them a packaged app silently defaults to a local MongoDB and dev-mode email (OTP never sent):
   - `MONGODB_URI` — Atlas/remote URI for product data (accounts, threads, connections)
-  - `RESEND_API_KEY` — Resend API key for OTP email (empty ⇒ dev mode)
-  - `EMAIL_FROM` — e.g. `Whybase <onboarding@resend.dev>` (or your verified domain)
+  - `SMTP_USER` — Gmail address used as the OTP sender (e.g. `keshavmehra2005@gmail.com`)
+  - `SMTP_PASS` — Gmail **App Password** for that account (16 chars; requires 2-Step Verification enabled). Leave empty for dev mode (OTP logged)
+  - `EMAIL_FROM` — e.g. `Whybase <keshavmehra2005@gmail.com>`
   - `APP_SECRET` — 64-char hex (keep the same value across releases so stored credentials stay decryptable)
-  - Optional `GROQ_MODEL`, `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` (MySQL defaults are configurable in-app anyway)
+  - Optional `SMTP_HOST`, `SMTP_PORT` (defaults `smtp.gmail.com`/`465`), `GROQ_MODEL`, `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` (MySQL defaults are configurable in-app anyway)
+  - OTP email requires real SMTP creds: Resend's `onboarding@resend.dev` sender only delivers to the Resend account owner's inbox, so never ship with that as `EMAIL_FROM`.
 - Client `electron/main.cjs` checks `autoUpdater.checkForUpdatesAndNotify()` 5s after boot + every 6h, prompts `Restart` when downloaded. Works only in packaged builds (`app.isPackaged`). Provide `GH_TOKEN` automatically via `secrets.GITHUB_TOKEN`; no extra setup.
 - Manual publish: `npm run desktop:publish` (Windows) or `desktop:publish:all` (needs all runners). For local test without publish use `desktop:dist:*`. To rebuild/patch an already-published version, re-run the workflow via **Actions → Release → Run workflow** (releases to the same `v<version>` tag with `--clobber`).
 - Note: release builds run from a clean checkout where the gitignored `.env` is absent; the workflow regenerates `.env` from the secrets above before building.
