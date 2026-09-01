@@ -18,6 +18,48 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # The repo's .env is gitignored and therefore absent in CI, but the build
+      # bakes selected values from it into the installer (MongoDB URI, Resend
+      # key/from, APP_SECRET). Without it the packaged app silently falls back to
+      # a local MongoDB and dev-mode email (OTP never sent). Generate a .env from
+      # repository secrets so installed builds get the real defaults. Values are
+      # written directly to the file and never echoed to the log.
+      - name: Generate .env for baked-in defaults
+        shell: pwsh
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+        run: |
+          $vals = [ordered]@{
+            'MONGODB_URI'       = $env:MONGODB_URI
+            'APP_SECRET'        = $env:APP_SECRET
+            'RESEND_API_KEY'    = $env:RESEND_API_KEY
+            'EMAIL_FROM'        = $env:EMAIL_FROM
+            'GROQ_MODEL'        = $env:GROQ_MODEL
+            'MYSQL_HOST'        = $env:MYSQL_HOST
+            'MYSQL_PORT'        = $env:MYSQL_PORT
+            'MYSQL_USER'        = $env:MYSQL_USER
+            'MYSQL_PASSWORD'    = $env:MYSQL_PASSWORD
+            'MYSQL_DATABASE'    = $env:MYSQL_DATABASE
+          }
+          $lines = @()
+          foreach ($k in $vals.Keys) {
+            $v = $vals[$k]
+            if ($v) { $lines += "$k=$v" }
+          }
+          if ($lines.Count -eq 0) {
+            Write-Error 'No repository secrets found. Add MONGODB_URI, RESEND_API_KEY, EMAIL_FROM, APP_SECRET (etc.) under Settings > Secrets and variables > Actions for the release build to bake in real defaults.'
+            exit 1
+          }
+          Set-Content -Path '.env' -Value $lines -Encoding Ascii
       # Build the unsigned NSIS installer (+ latest.yml + .blockmap) without
       # publishing. Skip code signing so electron-builder does not need the
       # winCodeSign signing toolchain.
@@ -36,22 +78,28 @@ jobs:
             exit 1
           }
           Get-ChildItem -Path release -File | Select-Object Name, Length
-      # Upload the artifacts to the GitHub Release for the pushed tag. electron-updater
-      # on installed clients polls the release's latest.yml, so exactly these files
-      # must land there: the installer, its blockmap, and latest.yml.
+      # Upload the artifacts to the GitHub Release. electron-updater on installed
+      # clients polls the release's latest.yml, so exactly these files must land
+      # there: the installer, its blockmap, and latest.yml. For tag pushes the
+      # release tag is the pushed tag (e.g. v1.0.0); for manual workflow_dispatch
+      # (re-running after updating secrets) it is derived from package.json so it
+      # re-uploads to the same version's release.
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
         run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "v$version" }
+          Write-Host "Publishing release tag: $tag"
           $assets = @()
           $assets += Get-ChildItem 'release/*.exe' -File | Select-Object -ExpandProperty FullName
           $assets += Get-ChildItem 'release/*.exe.blockmap' -File | Select-Object -ExpandProperty FullName
           $assets += 'release/latest.yml'
-          gh release create "$env:GITHUB_REF_NAME" @assets `
-            --title "$env:GITHUB_REF_NAME" `
-            --notes "Whybase desktop release $env:GITHUB_REF_NAME" 2>&1 `
-            || gh release upload "$env:GITHUB_REF_NAME" @assets --clobber
-        shell: pwsh
+          gh release create "$tag" @assets `
+            --title "$tag" `
+            --notes "Whybase desktop release $tag" 2>&1 `
+            || gh release upload "$tag" @assets --clobber
 
   # Uncomment to enable Linux/mac builds (require respective runners)
   # build-linux:
