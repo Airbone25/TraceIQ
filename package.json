@@ -1,6 +1,6 @@
 {
   "name": "whybase",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI Database Investigation Agent",
   "author": "Whybase",
   "main": "electron/main.cjs",
